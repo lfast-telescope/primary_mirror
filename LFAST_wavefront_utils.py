@@ -173,20 +173,6 @@ def get_M_and_C(avg_ref,Z):
     C = Zernike_decomposition(Z, M, -1) #Zernike fit
     return M, C
 
-def remove_modes(M,C,Z,remove_coef):
-    #Remove Zernike modes from input surface map
-    removal = M[1]*0
-    for coef in remove_coef:
-        term = (Z[1].transpose(2,0,1)[coef])*C[2][coef]
-        removal += term
-        
-        if False: #Plot the removal terms for sanity
-            plt.imshow(term)
-            plt.title(coef+1)
-            plt.show()
-    Surf = M[1] - removal
-    return Surf
-
 def add_defocus(avg_ref,Z,amplitude = 1): 
     #Adds an "amplitude" amount of power to surface map; useful for focus optimization
     power = (Z[1].transpose(2,0,1)[4])*amplitude
@@ -226,7 +212,7 @@ def propagate_wavefront(avg_ref,clear_aperture_outer,clear_aperture_inner,Z=None
     output_foc_holder = []
     throughput_holder = []  
     
-    if type(wavelengths) != list:
+    if type(wavelengths) != list and type(wavelengths) != np.ndarray:
         wavelengths = [wavelengths]
         
     for wavelength in wavelengths:    

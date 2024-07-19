@@ -457,3 +457,16 @@ def iterative_correction(filename,T_a,n,H_prev): #iterative correction function.
     
     return current,power,H_net
 
+def remove_modes(M,C,Z,remove_coef):
+    #Remove Zernike modes from input surface map
+    removal = M[1]*0
+    for coef in remove_coef:
+        term = (Z[1].transpose(2,0,1)[coef])*C[2][coef]
+        removal += term
+        
+        if False: #Plot the removal terms for sanity
+            plt.imshow(term)
+            plt.title(coef+1)
+            plt.show()
+    Surf = M[1] - removal
+    return Surf

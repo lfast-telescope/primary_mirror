@@ -12,12 +12,14 @@ from matplotlib import pyplot as plt
 from scipy import optimize
 from matplotlib import cm
 from scipy import interpolate
-import pickle
 import cv2 as cv
 from matplotlib.widgets import EllipseSelector
 from General_zernike_matrix import *
 from tec_helper import *
 from LFAST_TEC_output import *
+from LFAST_wavefront_utils import *
+from plotting_utils import *
+import pickle
 from hcipy import *
 import os
 from matplotlib import patches as mpatches
@@ -26,13 +28,7 @@ import csv
 #%% Set up training system: create Zernike matrix and create a set of images from the h5 file
 
 #Path to the folders of h5 from the interferometer
-path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M1_1_TEC/11-6/references/'
-#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M6/10-23/'
-#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M7/2-5-24/hub_removed/'
-#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M7/11-17/'
-#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
-#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M9/20240528/tec20_1/'
-
+path = 'C:/Users/lfast-admin/Documents/mirrors/M6/07192024/'
 
 #Mirror parameters
 in_to_m = 25.4e-3
@@ -43,23 +39,23 @@ clear_aperture_outer = 0.47*OD
 clear_aperture_inner = ID
 
 #%%Set up the Zernike fitting matrix to process the h5 files
-Z = General_zernike_matrix(89,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
+Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
 #%%
 remove_normal_coef = [0,1,2,4]
 output_ref, output_foc,throughput,x_foc,y_foc = process_wavefront_error(path,Z,remove_normal_coef,clear_aperture_outer,clear_aperture_inner)
 
 #%%
-mirror = 'Mirror 1'
-if True: #tip/tilt/focus subtraction
+mirror = 'Mirror 6'
+if False: #tip/tilt/focus subtraction
     remove_coef=[ 0,  1,  2,  4]
     title = mirror + ' without TEC correction'
 
-elif True: #modes to astigmatism subtraction
+elif False: #modes to astigmatism subtraction
     remove_coef=[ 0,  1,  2,  3, 4, 5]
     title = mirror + ' (astigmatism removed)'
     
-elif True: #astigmatism + spherical subtraction
+elif False: #astigmatism + spherical subtraction
     remove_coef = [ 0,  1,  2,  3, 4,  5,  6,  9, 10, 14]
     title = mirror + ' with edge correction'
 
@@ -71,7 +67,6 @@ M,C = get_M_and_C(output_ref, Z)
 updated_surface = remove_modes(M,C,Z,remove_coef)
 
 #plot_zernike_modes_as_bar_chart(C,num_modes=66)
-#%%
 wave = np.linspace(400e-9,1.6e-6,13)
 output_foc,throughput,x_foc,y_foc = propagate_wavefront(updated_surface,clear_aperture_outer,clear_aperture_inner,Z,use_best_focus=True,wavelengths = wave)
 plot_mirror_and_psf(title,updated_surface,output_foc,throughput,x_foc,y_foc)
