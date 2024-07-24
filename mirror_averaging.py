@@ -28,7 +28,8 @@ import csv
 #%% Set up training system: create Zernike matrix and create a set of images from the h5 file
 
 #Path to the folders of h5 from the interferometer
-path = 'C:/Users/lfast-admin/Documents/mirrors/M6/07192024/'
+#path = 'C:/Users/lfast-admin/Documents/mirrors/M6/07192024/'
+path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
 
 #Mirror parameters
 in_to_m = 25.4e-3
