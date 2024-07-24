@@ -9,6 +9,7 @@ Created on Thu Aug 10 17:35:20 2023
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib as mpl
 from scipy import optimize
 from matplotlib import cm
 from scipy import interpolate
@@ -28,8 +29,8 @@ import csv
 #%% Set up training system: create Zernike matrix and create a set of images from the h5 file
 
 #Path to the folders of h5 from the interferometer
-#path = 'C:/Users/lfast-admin/Documents/mirrors/M6/07192024/'
-path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
+path = 'C:/Users/lfast-admin/Documents/mirrors/M6/07192024/'
+#path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
 
 #Mirror parameters
 in_to_m = 25.4e-3
@@ -45,6 +46,7 @@ Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture
 #%%
 remove_normal_coef = [0,1,2,4]
 output_ref, output_foc,throughput,x_foc,y_foc = process_wavefront_error(path,Z,remove_normal_coef,clear_aperture_outer,clear_aperture_inner)
+
 
 #%%
 mirror = 'Mirror 6'

@@ -5,7 +5,7 @@ Created on Fri Jul 12 11:09:11 2024
 @author: warre
 
 Evaluate surface ROC using spherometer measurments
-Measurements using grid that maps to squares on the lapping body
+Measurements using grid that maps to squares on the lapping body`
 """
 
 import numpy as np

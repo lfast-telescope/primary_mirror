@@ -4,7 +4,6 @@ from matplotlib import pyplot as plt
 from scipy import optimize
 from matplotlib import cm
 from scipy import interpolate
-import pickle
 import h5py
 import cv2 as cv
 from matplotlib.widgets import EllipseSelector
