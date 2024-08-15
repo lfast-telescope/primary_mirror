@@ -18,8 +18,8 @@ from hcipy import *
 from plotting_utils import *
 from LFAST_wavefront_utils import *
 
-csv_file = 'C:/Users/warre/OneDrive/Documents/LFAST/lap/roc_0716.csv'
-
+#csv_file = 'C:/Users/warre/OneDrive/Documents/LFAST/lap/roc_0716.csv'
+csv_file = 'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/roc_0716.csv'
 #%%
 
 ideal_sag=0.076
