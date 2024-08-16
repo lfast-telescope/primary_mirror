@@ -284,7 +284,7 @@ def rms_objective_function(eigenvectors,updated_surface,eigenvalues): #takes inp
     reduced_surface = add_tec_influences(updated_surface,eigenvectors,eigenvalues)
     vals = reduced_surface[~np.isnan(reduced_surface)]
     rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))*1000
-    if False:
+    if True:
         print('rms error is ' + str(round(rms,3)) + 'nm')
     return rms
 

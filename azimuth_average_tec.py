@@ -30,7 +30,7 @@ import csv
 
 #Path to the folders of h5 from the interferometer
 
-path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M9/20240531/20/'
+path = 'C:/Users/lfast-admin/Documents/mirrors/M9/influence_functions/'
 reference_path = path + 'unpowered/'
 
 #Mirror parameters

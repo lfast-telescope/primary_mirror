@@ -168,8 +168,8 @@ def import_4D_map(filename,Z): #import measured surface from 4D h5 file. input i
     
 def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
     
-    pixel_ID = 1000  #original value: 63500
-    pixel_OD = 381000 #original value: 381000
+    pixel_ID = 63500  #original value: 63500 . Changed from 1000 on 8/15/2024
+    pixel_OD = 377000 #original value: 381000. Changed from 381000 on 8/15/2024
     
     f = h5py.File(filename,'r')
     data = np.array(list(f['measurement0']['genraw']['data']))
