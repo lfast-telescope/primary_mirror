@@ -1,4 +1,4 @@
 # primary_mirror
-Primary mirror analysis and TEC control using interferometer
+Primary mirror analysis and TEC control using interferometer and spherometer
 
 Wavefront analysis code that uses h5 files from 4D interferometer. Used for TEC characterization; mirror figure control
