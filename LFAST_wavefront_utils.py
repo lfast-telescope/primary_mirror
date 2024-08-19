@@ -371,7 +371,7 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
     ca_OD = 30
     ca_ID = 4
 
-    with open(csv_file, mode='r') as file:
+    with open(csv_file, mode='r', encoding='utf-8-sig') as file:
         reader = csv.reader(file)
         data = list(reader)
 
