@@ -101,7 +101,6 @@ for tec in os.listdir(path):
             #%%
             fig,ax = plt.subplots()
             pcm = ax.pcolormesh(x_linspace,x_linspace,delta/2)
-            #ax.add_artist(mpatches.Circle([x_loc,y_loc], color = 'r', radius=0.01,fill=False,linewidth = 0.5))
             fig.suptitle('Surface height changes from single TEC activation')
             ax.set_xlabel('um',x=1.1,)
             ax.xaxis.set_label_coords(1.1, -.02)

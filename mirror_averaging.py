@@ -29,7 +29,7 @@ import csv
 #%% Set up training system: create Zernike matrix and create a set of images from the h5 file
 
 #Path to the folders of h5 from the interferometer
-path = 'C:/Users/lfast-admin/Documents/mirrors/M8/20240528/'
+path = 'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/M9/20241015/v4/'
 #path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
 
 #Mirror parameters
@@ -49,8 +49,8 @@ output_ref, output_foc,throughput,x_foc,y_foc = process_wavefront_error(path,Z,r
 
 
 #%%
-mirror = 'Mirror 6'
-if False: #tip/tilt/focus subtraction
+mirror = 'M1n9'
+if True: #tip/tilt/focus subtraction
     remove_coef=[ 0,  1,  2,  4]
     title = mirror + ' without TEC correction'
 
