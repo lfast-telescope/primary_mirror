@@ -28,46 +28,47 @@ from scipy import ndimage
 
 #%% Low level h5 processing and Zernike fitting
 
-def save_image_set(folder_path, Z, remove_coef=[]):
+def save_image_set(folder_path,Z,remove_coef = [],mirror_type='uncoated'):
     #Store a folder containing h5 files as a tuple
     output = []
     for file in os.listdir(folder_path):
         if file.endswith(".h5"):
-            if not file.endswith("calibration.h5"):
-                try:
+            try:
+                if mirror_type == 'uncoated':
                     if len(remove_coef) == 0:
-                        surf = import_4D_map_auto(folder_path + file, Z)
+                        surf = import_4D_map_auto(folder_path + file,Z)
                     else:
-                        surf = import_4D_map_auto(folder_path + file, Z, normal_tip_tilt_power=False,
-                                                  remove_coef=remove_coef)
-                    output.append(surf[1])
+                        surf = import_4D_map_auto(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
+                else:
+                    surf = import_cropped_4D_map(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
+                output.append(surf[1])
 
-                    if False:
-                        plt.imshow(surf[1])
-                        plt.colorbar()
-                        plt.title(file)
-                        plt.show()
-                except OSError as e:
-                    print('Could not import file ' + file)
+                if False:
+                    plt.imshow(surf[1])
+                    plt.colorbar()
+                    plt.title(file)
+                    plt.show()
+            except OSError as e:
+                print('Could not import file ' + file)
     return output
+ 
+def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True,mirror_type='uncoated'): #%% Let's do some heckin' wavefront analysis!
 
 
 def process_wavefront_error(path, Z, remove_coef, clear_aperture_outer, clear_aperture_inner,
                             compute_focal=True):  #%% Let's do some heckin' wavefront analysis!
     #Load a set of mirror height maps in a folder and average them
-    references = save_image_set(path, Z, remove_coef)
-    avg_ref = np.flip(np.mean(references, 0), 0)
+    references = save_image_set(path,Z,remove_coef,mirror_type)
+    avg_ref = np.flip(np.mean(references,0),0)
     output_ref = avg_ref.copy()
-
+     
     if compute_focal:
-        output_foc, throughput, x_foc, y_foc = propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner,
-                                                                   Z, use_best_focus=True)
-        return output_ref, output_foc, throughput, x_foc, y_foc
+        output_foc,throughput,x_foc,y_foc = propagate_wavefront(avg_ref,clear_aperture_outer,clear_aperture_inner,Z,use_best_focus=True)     
+        return output_ref, output_foc,throughput,x_foc,y_foc
     else:
         return output_ref
 
-
-def return_coef(C, coef_array):
+def return_coef(C,coef_array):
     #Print out the amplitudes of Zernike polynomials
     try:
         for coef in coef_array:
@@ -75,39 +76,37 @@ def return_coef(C, coef_array):
     except:
         print('Z' + str(coef_array) + ' is ' + str(round(C[2][coef_array] * 1000)) + 'nm')
 
-
-def return_zernike_nl(order, print_output=True):
+def return_zernike_nl(order, print_output = True):
     #Create list of n,m Zernike indicies
     n_holder = []
     l_holder = []
     coef = 0
-    for n in np.arange(0, order + 1):
-        for l in np.arange(-n, n + 1, 2):
+    for n in np.arange(0,order+1):
+        for l in np.arange(-n,n+1,2):
             if print_output:
                 print('Z' + str(coef) + ': ' + str(n) + ', ' + str(l))
                 coef += 1
             n_holder.append(n)
             l_holder.append(l)
-
-    return n_holder, l_holder
-
-
-def calculate_error_per_order(M, C, Z):
-    n, l = return_zernike_nl(12, print_output=False)
+            
+    return n_holder,l_holder
+   
+def calculate_error_per_order(M,C,Z):
+    n,l = return_zernike_nl(12,print_output = False)
     error = []
+    
+    remove_coef = [0,1,2,4]
+    updated_surface = remove_modes(M,C,Z,remove_coef)
+    
+    vals = updated_surface[~np.isnan(updated_surface)]*1000
+    rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
 
-    remove_coef = [0, 1, 2, 4]
-    updated_surface = remove_modes(M, C, Z, remove_coef)
-
-    vals = updated_surface[~np.isnan(updated_surface)] * 1000
-    rms = np.sqrt(np.sum(np.power(vals, 2)) / len(vals))
-
-    coef = np.power(C[2] * 1000, 2)
-
-    list_orders = np.arange(2, 13)
+    coef = np.power(C[2]*1000,2)
+    
+    list_orders = np.arange(2,13)
     output_order = list_orders.copy()
     for order in list_orders:
-        args = np.where(n == order)
+        args = np.where(n==order)
         flag = np.where(args[0] < len(C[2]))
         if len(flag[0]) != 0:
             subset = coef[args]
@@ -115,12 +114,12 @@ def calculate_error_per_order(M, C, Z):
             if False:
                 print('Order ' + str(order) + ' has ' + str(error[-1]))
         elif len(output_order) == len(list_orders):
-            output_order = np.arange(2, order)
-
-    residual = np.sqrt(rms ** 2 - np.sum(np.power(error, 2)))
-
-    plt.bar(output_order, error)
-    plt.bar(np.max(output_order + 1), residual)
+            output_order = np.arange(2,order)
+                
+    residual = np.sqrt(rms**2 - np.sum(np.power(error,2)))
+    
+    plt.bar(output_order,error)
+    plt.bar(np.max(output_order+1),residual)
     plt.xlabel('Zernike order')
     plt.ylabel('rms wavefront error (nm)')
     plt.title('Zernike amplitude per order')
@@ -133,61 +132,8 @@ def return_neighborhood(surface, x_linspace, x_loc, y_loc, neighborhood_size):
     [X, Y] = np.meshgrid(x_linspace, x_linspace)
     dist = np.sqrt((X - x_loc) ** 2 + (Y - y_loc) ** 2)
     neighborhood = dist < neighborhood_size
-    return np.nanmean(surface[neighborhood])
-
-
-def find_deflection_locs(surface, x_linspace, num_points=10):
-    #Find coordinates of greatest deflection. I'd like to use a filter here, but that has trouble with edge effects
-    x_locs = []
-    y_locs = []
-    sorted_surf = np.sort(np.abs(surface), axis=None)
-    for point in np.arange(1, num_points + 1):
-        max_def_arg = np.where(np.abs(surface) == sorted_surf[~np.isnan(sorted_surf)][-point])
-        x_locs.append(x_linspace[max_def_arg[1][0]])
-        y_locs.append(x_linspace[max_def_arg[0][0]])
-
-    if False:
-        fig,ax = plt.subplots()
-        ax.pcolormesh(x_linspace, x_linspace, surface)
-        ax.set_aspect('equal')
-        plt.scatter(x_locs, y_locs, s=5, c='r')
-        plt.show()
-
-    x_loc = np.mean(x_locs)
-    y_loc = np.mean(y_locs)
-    return x_loc, y_loc
-
-
-def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
-    angle_diff_holder = []
-    roe_holder = []
-    for tec_response in tec_responses:
-        loc_holder = []
-        for step in np.arange(len(tec_response)):
-            if np.abs(tec_response[step]['TEC cmd']) == 1:
-                delta = tec_response[step]['delta']
-                x_loc, y_loc = find_deflection_locs(delta, x_linspace)
-                loc_holder.append([x_loc, y_loc])
-
-        meas_loc = np.mean(loc_holder,0)
-        roe_holder.append(np.sqrt(np.sum(np.power(meas_loc,2))))
-        meas_angle = np.arctan2(meas_loc[1], meas_loc[0])
-        tec_num = tec_response[0]['TEC number']
-        tec = nominal_TEC_locs.loc[tec_num-1]
-        nominal_angle = np.arctan2(tec['Y (m)'], tec['X (m)'])
-        angle_diff = np.subtract(meas_angle, nominal_angle)
-
-        if np.abs(angle_diff) > np.pi:
-            if angle_diff > 0:
-                angle_diff = angle_diff - 2 * np.pi
-            else:
-                angle_diff = angle_diff + 2 * np.pi
-        angle_diff_holder.append(angle_diff)
-    angle_diff = np.mean(angle_diff_holder)
-    roe = np.mean(roe_holder)
-    return angle_diff, roe
-
-
+    return np.nanmean(surface[neighborhood])  
+  
 #%% Wavefront analysis and propagation routines
 
 def get_M_and_C(avg_ref, Z):
@@ -228,7 +174,7 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
     focal_length = clear_aperture_outer * 3.5
 
     #Fiber parameters
-    fiber_radius = 17e-6 / 2
+    fiber_radius = 17e-6/2
     fiber_subtense = fiber_radius / focal_length
 
     grid = make_pupil_grid(500, clear_aperture_outer)
@@ -241,11 +187,10 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
 
     if type(wavelengths) != list and type(wavelengths) != np.ndarray:
         wavelengths = [wavelengths]
+        
+    for wavelength in wavelengths:    
 
-    for wavelength in wavelengths:
-        wf = Wavefront(
-            make_obstructed_circular_aperture(clear_aperture_outer, clear_aperture_inner / clear_aperture_outer)(grid),
-            wavelength)
+        wf = Wavefront(make_obstructed_circular_aperture(clear_aperture_outer,clear_aperture_inner/clear_aperture_outer)(grid),wavelength)
         wf.total_power = 1
 
         opd = Field(prop_ref.ravel() * 1e-6, grid)
@@ -274,11 +219,10 @@ def find_best_focus(output_ref, Z, centerpoint, scale, num_trials, clear_apertur
     defocus_range = np.linspace(centerpoint - scale, centerpoint + scale, num_trials)
     throughput_holder = []
     for amplitude in defocus_range:
-        title = 'Adding ' + str(round(amplitude, 2)) + ' focus '
-        defocused_avg = add_defocus(output_ref, Z, amplitude)
-        output_foc, throughput, x_foc, y_foc = propagate_wavefront(defocused_avg, clear_aperture_outer,
-                                                                   clear_aperture_inner)
-        throughput_holder.append(throughput)
+        title = 'Adding ' + str(round(amplitude,2)) + ' focus '
+        defocused_avg = add_defocus(output_ref,Z,amplitude)
+        output_foc,throughput,x_foc,y_foc = propagate_wavefront(defocused_avg,clear_aperture_outer,clear_aperture_inner)
+        throughput_holder.append(throughput)         
     if True:
         plt.plot(defocus_range, throughput_holder)
         plt.xlabel('Defocus')
@@ -289,23 +233,20 @@ def find_best_focus(output_ref, Z, centerpoint, scale, num_trials, clear_apertur
 
 def optimize_focus(updated_surface, Z, clear_aperture_outer, clear_aperture_inner, wavelength):
     #Focus optimizer
-    res = minimize_scalar(objective_function, method='bounded', bounds=[-1, 1],
-                          args=(updated_surface, Z, clear_aperture_outer, clear_aperture_inner, wavelength))
-    defocused_surf = add_defocus(updated_surface, Z, amplitude=res.x)
-    defocused_surf[np.isnan(defocused_surf)] = 0
+    res = minimize_scalar(objective_function,method='bounded', bounds=[-1,1], args = (updated_surface,Z,clear_aperture_outer,clear_aperture_inner, wavelength))
+    defocused_surf= add_defocus(updated_surface,Z,amplitude=res.x)
+    defocused_surf[np.isnan(defocused_surf)] = 0 
 
     return defocused_surf
-
-
-def objective_function(amplitude, output_ref, Z, clear_aperture_outer, clear_aperture_inner,
-                       wavelength):  #takes input, applies operations, returns a single number
+    
+def objective_function(amplitude,output_ref,Z,clear_aperture_outer,clear_aperture_inner, wavelength): #takes input, applies operations, returns a single number
     #Optimization function for minimization optimization: returns negative throughput in range [0-1]
     defocused_avg = add_defocus(output_ref, Z, amplitude)
     output_foc, throughput, x_foc, y_foc = propagate_wavefront(defocused_avg, clear_aperture_outer,
                                                                clear_aperture_inner, wavelengths=wavelength)
 
     if False:
-        print('Amplitude is ' + str(amplitude) + ' and throughput is ' + str(throughput * 100))
+        print('Amplitude is ' + str(amplitude) + ' and throughput is ' + str(throughput*100))
     return -throughput
 
 
@@ -340,22 +281,17 @@ def add_tec_influences(updated_surface, eigenvectors, eigenvalues):
     for num, eigenvalue in enumerate(eigenvalues):
         updated_surface = updated_surface + eigenvectors[num] * eigenvalue
     return updated_surface
-
-
-def optimize_TECs(updated_surface, eigenvectors, eigenvalues, eigenvalue_bounds, clear_aperture_outer,
-                  clear_aperture_inner, Z, metric='rms'):
+    
+def optimize_TECs(updated_surface,eigenvectors,eigenvalues,eigenvalue_bounds,clear_aperture_outer,clear_aperture_inner,Z,metric = 'rms'):
     #Choose set of eigenvalues that minimize mirror surface error, either based on rms error or encircled energy
     if metric == 'rms':
-        res = minimize(rms_objective_function, x0=eigenvalues,
-                       args=(updated_surface, eigenvectors))  #, method='bounded', bounds = eigenvalue_bounds)
+        res = minimize(rms_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors))#, method='bounded', bounds = eigenvalue_bounds)
     elif metric == 'EE':
-        res = minimize(EE_objective_function, x0=eigenvalues, args=(
-        updated_surface, eigenvectors, clear_aperture_outer, clear_aperture_inner,
-        Z))  #, method='bounded', bounds = eigenvalue_bounds)
+        res = minimize(EE_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,clear_aperture_outer,clear_aperture_inner,Z))#, method='bounded', bounds = eigenvalue_bounds)
     else:
         print('Bruh, how many methods do you want?')
         return updated_surface, eigenvalues
-
+        
     eigenvalues = res.x
     reduced_surface = add_tec_influences(updated_surface, eigenvectors, eigenvalues)
     return reduced_surface, eigenvalues
@@ -382,35 +318,33 @@ def EE_objective_function(eigenvectors, updated_surface, eigenvalues, clear_aper
         print('EE is ' + str(round(float(throughput) * 100, 2)) + '%')
     return -float(throughput)
 
-
 #%% Spherometer measurement algorithms
 
-def process_spherometer_grid(csv_file, size_of_square=3, number_of_squares=10, pixels_per_square=10,
-                             spherometer_diameter=11.5, object_diameter=28, ideal_sag=0.076, mirror_center_x=5,
-                             mirror_center_y=5):
+def process_spherometer_grid(csv_file,size_of_square=3,number_of_squares=10,pixels_per_square=10,spherometer_diameter=11.5,object_diameter=28,ideal_sag=0.076,mirror_center_x = 5, mirror_center_y = 5):
+    
     #csv_file should be a 1D file representing values measured on a NxN grid
-
+    
     #size_of_square, spherometer_diameter,object_diameter,ideal_sag are whatever units you like
     #Everything after that lives in tile space
-
-    spher_radius = spherometer_diameter / 2 / size_of_square  #units: tiles
-    mirror_radius = object_diameter / 2 / size_of_square  #units: tiles
-
-    sigma = 3  #size in pixels for Gaussian blurring
-
-    with open(csv_file, mode='r') as file:
+    
+    spher_radius = spherometer_diameter / 2 / size_of_square #units: tiles
+    mirror_radius = object_diameter / 2 / size_of_square #units: tiles
+        
+    sigma = 3 #size in pixels for Gaussian blurring
+    
+    with open(csv_file, mode ='r') as file:    
         reader = csv.reader(file)
-        data = list(reader)
-
-        #Set up coordinates for tile space
-    x = np.linspace(0, number_of_squares, number_of_squares * pixels_per_square)
-    y = np.linspace(0, number_of_squares, number_of_squares * pixels_per_square)
-
-    X, Y = np.meshgrid(x, y)
-
+        data = list(reader)            
+    
+    #Set up coordinates for tile space
+    x = np.linspace(0,number_of_squares,number_of_squares*pixels_per_square)
+    y = np.linspace(0,number_of_squares,number_of_squares*pixels_per_square)
+    
+    X,Y = np.meshgrid(x,y)
+    
     #Initialize empty list that overlaying measurements will be attached to
     fill_data = [[] for i in range(X.size)]
-    avg_data = list([0] * len(fill_data))
+    avg_data = list([0]*len(fill_data))
     list_data = []
 
     for num, sag in enumerate(data[0]):
@@ -511,8 +445,8 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
     smoothed_data = ndimage.gaussian_filter(cropped_data, sigma, radius=gauss_filter_radius)
 
     if crop_clear_aperture:
-        mirror_OD = distance_from_center < ca_OD / 2
-        mirror_ID = distance_from_center > ca_ID / 2
+        mirror_OD = distance_from_center < ca_OD/2
+        mirror_ID = distance_from_center > ca_ID/2
         mirror_extent = mirror_OD * mirror_ID
     else:
         mirror_extent = distance_from_center < mirror_radius

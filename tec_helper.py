@@ -11,7 +11,6 @@ file_prefix = 'uninit'
 
 TEC_FULL_RANGE_CURRENT = 0.8
 
-
 def get_file_date_prefix():
     t_now = time.time()
     dt_obj = dt.fromtimestamp(t_now)
