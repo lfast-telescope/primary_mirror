@@ -53,10 +53,6 @@ def save_image_set(folder_path,Z,remove_coef = [],mirror_type='uncoated'):
     return output
  
 def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True,mirror_type='uncoated'): #%% Let's do some heckin' wavefront analysis!
-
-
-def process_wavefront_error(path, Z, remove_coef, clear_aperture_outer, clear_aperture_inner,
-                            compute_focal=True):  #%% Let's do some heckin' wavefront analysis!
     #Load a set of mirror height maps in a folder and average them
     references = save_image_set(path,Z,remove_coef,mirror_type)
     avg_ref = np.flip(np.mean(references,0),0)
