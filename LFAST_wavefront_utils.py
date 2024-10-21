@@ -27,16 +27,19 @@ from scipy import ndimage
 
 #%% Low level h5 processing and Zernike fitting
 
-def save_image_set(folder_path,Z,remove_coef = []):
+def save_image_set(folder_path,Z,remove_coef = [],mirror_type='uncoated'):
     #Store a folder containing h5 files as a tuple
     output = []
     for file in os.listdir(folder_path):
         if file.endswith(".h5"):
             try:
-                if len(remove_coef) == 0:
-                    surf = import_4D_map_auto(folder_path + file,Z)
+                if mirror_type == 'uncoated':
+                    if len(remove_coef) == 0:
+                        surf = import_4D_map_auto(folder_path + file,Z)
+                    else:
+                        surf = import_4D_map_auto(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
                 else:
-                    surf = import_4D_map_auto(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
+                    surf = import_cropped_4D_map(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
                 output.append(surf[1])
 
                 if False:
@@ -48,9 +51,9 @@ def save_image_set(folder_path,Z,remove_coef = []):
                 print('Could not import file ' + file)
     return output
  
-def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True): #%% Let's do some heckin' wavefront analysis!
+def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True,mirror_type='uncoated'): #%% Let's do some heckin' wavefront analysis!
     #Load a set of mirror height maps in a folder and average them
-    references = save_image_set(path,Z,remove_coef)
+    references = save_image_set(path,Z,remove_coef,mirror_type)
     avg_ref = np.flip(np.mean(references,0),0)
     output_ref = avg_ref.copy()
      
@@ -284,7 +287,7 @@ def rms_objective_function(eigenvectors,updated_surface,eigenvalues): #takes inp
     reduced_surface = add_tec_influences(updated_surface,eigenvectors,eigenvalues)
     vals = reduced_surface[~np.isnan(reduced_surface)]
     rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))*1000
-    if True:
+    if False:
         print('rms error is ' + str(round(rms,3)) + 'nm')
     return rms
 

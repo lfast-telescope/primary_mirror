@@ -167,9 +167,10 @@ def import_4D_map(filename,Z): #import measured surface from 4D h5 file. input i
 
     
 def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
-    
-    pixel_ID = 63500  #original value: 63500 . Changed from 1000 on 8/15/2024
-    pixel_OD = 377000 #original value: 381000. Changed from 381000 on 8/15/2024
+
+    #Mirror radius in um
+    pixel_ID = 1.5*25.4*1e3  #original value: 63500 . Changed from 1000 on 8/15/2024
+    pixel_OD = 15*25.4*1e3 #original value: 381000. Changed from 381000 on 8/15/2024
     
     f = h5py.File(filename,'r')
     data = np.array(list(f['measurement0']['genraw']['data']))
@@ -209,10 +210,15 @@ def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
     
     data_crop = data[int((1-y2)*len(data[0])):int((1-y1)*len(data[0])),int((x1)*len(data[0])):int((x2)*len(data[0]))]
     
-    zs_cropped = np.flip(data_crop, axis = 0)#/2 #cropped image, perform parity flip and divide by 2 for WFE to surface conversion
+    zs_cropped = np.flip(data_crop, axis = 0)#/2 #cropped image, perform parity flip
     zs_cropped_copy = zs_cropped.copy()
     zs_cropped_copy[np.isnan(zs_cropped_copy)] = 0
-    
+
+    #Don't you love random ass numbers 200 lines into a piece of code that you didn't write?
+    #To my best guess, this is mirror half radius in um
+    #The really annoying thing about it though is that this shouldn't be hard-coded - it changes with subtense
+    #It'd be better for the user to just establish the mirror size
+    #Comments from warrenbfoster, 10/18/2024. Profanity redacted.
     xs = np.linspace(-387500,387500,len(zs_cropped[0]))
     ys = np.linspace(-387500,387500,len(zs_cropped.transpose()[0]))
    
@@ -228,6 +234,10 @@ def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
     coords = list(zip(inds[0],inds[1]))                 #remove data points outside of clear aperture
     for j,m in enumerate(coords):                       #
         zi[coords[j][0]][coords[j][1]] = np.nan         #
+        if False: #plot intermediate steps to figure out wtf this step is doing
+            if j % 1000 == 0:
+                plt.imshow(zi)
+                plt.show()
         
     M = zi.flatten(),zi
     
@@ -247,7 +257,89 @@ def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
     else:
         print('Strange things are afoot')
     return Surf.flatten(),Surf #return 1D flattened surface and 2D surface    
-        
+
+def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[]):
+    #Revision of Nick's import_4D_map_auto, but using the assumption that the user has
+    #set an analysis mask that crops out the mirror outside the clear aperture.
+    #This only works for coated mirrors where this distinction is obvious.
+
+    clear_aperture_radius = 15 * 25.4 * 1e3 #units:um
+
+    f = h5py.File(filename, 'r')
+    data = np.array(list(f['measurement0']['genraw']['data']))
+
+    invalid = np.nanmax(data)
+
+    data[data == invalid] = np.nan  # remove invalid values
+    data = data * (632.8 / 1000)  # convert from waves to um
+
+    scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
+    scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
+    scale[scale == 0] = 1  #
+
+    img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
+    img = cv.medianBlur(img, 5)  # median blurring function to help with detection
+
+    circles = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+                              param1=20, param2=15, minRadius=100,
+                              maxRadius=800)  # Output in (x_center,y_center,radius)
+
+    circles = np.uint16(np.around(circles))  # Round vals to nearest integer
+
+    r = circles[0][0][2]  # No longer trim edge to remove noisy data, because user has already done this
+
+    x1 = (circles[0][0][0] - r) / len(img)  # crop h5 data array using circle params from Hough Gradient function
+    x2 = (circles[0][0][0] + r) / len(img)
+    y1 = 1 - (circles[0][0][1] + r) / len(img)  # Flipped due to img/contour being mirrored across y-axis
+    y2 = 1 - (circles[0][0][1] - r) / len(img)  #
+
+    data_crop = data[int((1 - y2) * len(data[0])):int((1 - y1) * len(data[0])),
+                int((x1) * len(data[0])):int((x2) * len(data[0]))]
+
+    zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
+    zs_cropped_copy = zs_cropped.copy()
+    zs_cropped_copy[np.isnan(zs_cropped_copy)] = 0
+
+    #Define grid that the measurement is using
+    xs = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped[0]))
+    ys = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped.transpose()[0]))
+
+    Z_int = interpolate.RectBivariateSpline(ys, xs, zs_cropped_copy)
+
+    #Interpolate measurement onto a 500x500 grid
+    xi = yi = np.linspace(-clear_aperture_radius, clear_aperture_radius, 500)
+    X, Y = np.meshgrid(xi, yi)
+
+    zi = Z_int(Y, X, grid=False)  # truncate to clear aperture radius
+
+    test = np.sqrt(X ** 2 + Y ** 2)  #
+    inds = np.where((test > pixel_OD) | (test < pixel_ID))  #
+    coords = list(zip(inds[0], inds[1]))  # remove data points outside of clear aperture
+    for j, m in enumerate(coords):  #
+        zi[coords[j][0]][coords[j][1]] = np.nan  #
+        if j % 1000 == 0:
+            plt.imshow(zi)
+            plt.show()
+
+    M = zi.flatten(), zi
+
+    C = Zernike_decomposition(Z, M, -1)  # Zernike fit
+
+    f.close()
+
+    if normal_tip_tilt_power:
+        Piston = (Z[1].transpose(2, 0, 1)[0]) * C[2][0]  #
+        TiltY = (Z[1].transpose(2, 0, 1)[1]) * C[2][1]  # remove piston, tip/tilt, and power
+        TiltX = (Z[1].transpose(2, 0, 1)[2]) * C[2][2]  #
+        Power = (Z[1].transpose(2, 0, 1)[4]) * C[2][4]  #
+
+        Surf = M[1] - Piston - TiltX - TiltY - Power  ##remove piston, tip/tilt, and power
+    elif len(remove_coef) > 0:
+        Surf = remove_modes(M, C, Z, remove_coef)
+    else:
+        print('Strange things are afoot')
+    return Surf.flatten(), Surf  # return 1D flattened surface and 2D surface
+
 
 def Zernike_decomposition(Z,M,n):
     

@@ -29,7 +29,8 @@ import csv
 #%% Set up training system: create Zernike matrix and create a set of images from the h5 file
 
 #Path to the folders of h5 from the interferometer
-path = 'C:/Users/lfast-admin/Documents/mirrors/M8/20240528/'
+#path = 'C:/Users/lfast-admin/Documents/mirrors/M9/20241015/uncorrected/'
+path = 'C:/Users/lfast-admin/Documents/mirrors/M9/20241015/v4/'
 #path = 'C:/Users/warre/OneDrive/Documents/LFAST/mirrors/M8/20240308/'
 
 #Mirror parameters
@@ -49,8 +50,8 @@ output_ref, output_foc,throughput,x_foc,y_foc = process_wavefront_error(path,Z,r
 
 
 #%%
-mirror = 'Mirror 6'
-if False: #tip/tilt/focus subtraction
+mirror = 'M1N9'
+if True: #tip/tilt/focus subtraction
     remove_coef=[ 0,  1,  2,  4]
     title = mirror + ' without TEC correction'
 
@@ -63,7 +64,7 @@ elif False: #astigmatism + spherical subtraction
     title = mirror + ' with edge correction'
 
 else: #all non-coma modes to quatrefoil subtracted
-    remove_coef = [ 0,  1,  2,  3, 4,  5,  6,  9, 10, 12, 14]
+    remove_coef = [ 0,  1,  2,  3, 4,  5,  6,  9, 10, 12, 14,24,40]
     title = mirror + ' with spherical and edge modes removed'
     
 M,C = get_M_and_C(output_ref, Z)
@@ -72,13 +73,13 @@ updated_surface = remove_modes(M,C,Z,remove_coef)
 #plot_zernike_modes_as_bar_chart(C,num_modes=66)
 wave = np.linspace(400e-9,1.6e-6,13)
 output_foc,throughput,x_foc,y_foc = propagate_wavefront(updated_surface,clear_aperture_outer,clear_aperture_inner,Z,use_best_focus=True,wavelengths = wave)
-plot_mirror_and_psf(title,updated_surface,output_foc,throughput,x_foc,y_foc)
 
-#%%
-plot_zernike_modes_as_bar_chart(C,num_modes = 44,labels = ['Before','After stroke change'])
+pupil_vmin = -400
+pupil_vmax = 400
+foc_vmax = 0.0007219130189887503
+contour_intervals = np.arange(pupil_vmin,pupil_vmax+1,100)
+plot_mirror_and_psf(title,updated_surface,output_foc,throughput,x_foc,y_foc,bounds=[pupil_vmin,pupil_vmax,contour_intervals],foc_scale=foc_vmax)
 
-#%%
-error,residual = calculate_error_per_order(M,C,Z)
 #%%
 title = 'M7 (astigmatism removed)'
 remove_coef = [ 0,  1,  2,  3, 4, 5]
