@@ -218,7 +218,7 @@ def import_4D_map_auto(filename,Z,normal_tip_tilt_power=True,remove_coef = []):
     #To my best guess, this is mirror half radius in um
     #The really annoying thing about it though is that this shouldn't be hard-coded - it changes with subtense
     #It'd be better for the user to just establish the mirror size
-    #Comments from warrenbfoster, 10/18/2024. Profanity redacted.
+    #Comments from warrenbfoster, 10/18/2024. Profanity omitted.
     xs = np.linspace(-387500,387500,len(zs_cropped[0]))
     ys = np.linspace(-387500,387500,len(zs_cropped.transpose()[0]))
    
@@ -263,7 +263,9 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     #set an analysis mask that crops out the mirror outside the clear aperture.
     #This only works for coated mirrors where this distinction is obvious.
 
-    clear_aperture_radius = 15 * 25.4 * 1e3 #units:um
+    clear_aperture_radius = 15.2 * 25.4 * 1e3  # Mirror radius that is not covered by TEC
+    pixel_OD = 14.95 * 25.4 * 1e3 # Coated mirror radius
+    pixel_ID = 1.8 * 25.4 * 1e3 #Coated ID
 
     f = h5py.File(filename, 'r')
     data = np.array(list(f['measurement0']['genraw']['data']))
@@ -273,6 +275,13 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     data[data == invalid] = np.nan  # remove invalid values
     data = data * (632.8 / 1000)  # convert from waves to um
 
+    asymmetry = np.max(data.shape)-np.min(data.shape)
+    index = np.argmax(data.shape)
+    if index == 0:
+        data = data[int(np.floor(asymmetry/2)):-int(np.floor(asymmetry/2)),:]
+    else:
+        data = data[:,int(np.floor(asymmetry / 2)):-int(np.ceil(asymmetry / 2))]
+
     scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
     scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
     scale[scale == 0] = 1  #
@@ -280,21 +289,50 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
     img = cv.medianBlur(img, 5)  # median blurring function to help with detection
 
-    circles = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+    OD_circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
                               param1=20, param2=15, minRadius=100,
-                              maxRadius=800)  # Output in (x_center,y_center,radius)
+                              maxRadius=800)[0][0]  # Output in (x_center,y_center,radius)
 
-    circles = np.uint16(np.around(circles))  # Round vals to nearest integer
+    ID_circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+                              param1=20, param2=15, minRadius=10,
+                              maxRadius=18)[0][0]  # Output in (x_center,y_center,radius)
 
-    r = circles[0][0][2]  # No longer trim edge to remove noisy data, because user has already done this
+    difference = [OD_circle[i]-ID_circle[i] for i in [0,1]]
+    if np.sqrt(np.sum(np.power(difference,2))) > 3:
+        print('Warning: ID detection has coordinates ' + str(ID_circle) + ' and OD detection has coordinates ' + str(OD_circle))
+        if True:
+            fig,ax = plt.subplots()
+            ax.imshow(img)
+            artist1 = plt.Circle((OD_circle[0], OD_circle[1]), OD_circle[2], fill=False)
+            artist2 = plt.Circle((ID_circle[0], ID_circle[1]), ID_circle[2], fill=False)
+            ax.imshow(data)
+            ax.add_artist(artist1)
+            ax.add_artist(artist2)
+            ax.set_aspect('equal')
+            plt.show()
 
-    x1 = (circles[0][0][0] - r) / len(img)  # crop h5 data array using circle params from Hough Gradient function
-    x2 = (circles[0][0][0] + r) / len(img)
-    y1 = 1 - (circles[0][0][1] + r) / len(img)  # Flipped due to img/contour being mirrored across y-axis
-    y2 = 1 - (circles[0][0][1] - r) / len(img)  #
+    x = np.mean([OD_circle[0],ID_circle[0]])
+    y = np.mean([OD_circle[1],ID_circle[1]])
+    r = OD_circle[2] - 3  # Trim smaller edge to remove noisy data, because user has already done this
 
-    data_crop = data[int((1 - y2) * len(data[0])):int((1 - y1) * len(data[0])),
-                int((x1) * len(data[0])):int((x2) * len(data[0]))]
+    x1 = np.round(x-r)
+    x2 = np.round(x+r)
+    y1 = np.round(y-r)
+    y2 = np.round(y+r)
+
+    if False:   #Plot to verify cropping
+        fig, ax = plt.subplots()
+        img_plot = img.copy()
+        img_plot[int(y1):int(y2), int(x1):int(x2)] = 0
+        ax.imshow(img_plot)
+        artist1 = plt.Circle((OD_circle[0], OD_circle[1]), r, fill=False)
+        artist2 = plt.Circle((ID_circle[0], ID_circle[1]), ID_circle[2], fill=False)
+        ax.add_artist(artist1)
+        ax.add_artist(artist2)
+        ax.set_aspect('equal')
+        plt.show()
+
+    data_crop = data[int(y1):int(y2)+1, int(x1):int(x2)+1]
 
     zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
     zs_cropped_copy = zs_cropped.copy()
@@ -317,9 +355,6 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     coords = list(zip(inds[0], inds[1]))  # remove data points outside of clear aperture
     for j, m in enumerate(coords):  #
         zi[coords[j][0]][coords[j][1]] = np.nan  #
-        if j % 1000 == 0:
-            plt.imshow(zi)
-            plt.show()
 
     M = zi.flatten(), zi
 
