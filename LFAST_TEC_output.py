@@ -286,51 +286,39 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
     scale[scale == 0] = 1  #
 
-    img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
-    img = cv.medianBlur(img, 5)  # median blurring function to help with detection
+    circle_holder = []
+    for ksize in [61,81,101]:
+        img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
+        img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
+        fudge = 0
+        circle = None
+        while circle is None:
+            circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+                                  param1=20, param2=15, minRadius=175-fudge,
+                                  maxRadius=177+fudge)  # Output in (x_center,y_center,radius)
+            fudge = fudge + 1
+        circle_holder.append(circle[0][0])
 
-    OD_circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
-                              param1=20, param2=15, minRadius=100,
-                              maxRadius=800)[0][0]  # Output in (x_center,y_center,radius)
+    #Plot to see if the circle detection is working
+    x = np.median(circle_holder,0)[0]
+    y = np.median(circle_holder,0)[1]
+    r = np.min(circle_holder,0)[2]-1  # Trim smaller edge to remove noisy data, because user has already done this
 
-    ID_circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
-                              param1=20, param2=15, minRadius=10,
-                              maxRadius=18)[0][0]  # Output in (x_center,y_center,radius)
-
-    difference = [OD_circle[i]-ID_circle[i] for i in [0,1]]
-    if np.sqrt(np.sum(np.power(difference,2))) > 3:
-        print('Warning: ID detection has coordinates ' + str(ID_circle) + ' and OD detection has coordinates ' + str(OD_circle))
-        if True:
-            fig,ax = plt.subplots()
-            ax.imshow(img)
-            artist1 = plt.Circle((OD_circle[0], OD_circle[1]), OD_circle[2], fill=False)
-            artist2 = plt.Circle((ID_circle[0], ID_circle[1]), ID_circle[2], fill=False)
-            ax.imshow(data)
-            ax.add_artist(artist1)
-            ax.add_artist(artist2)
-            ax.set_aspect('equal')
-            plt.show()
-
-    x = np.mean([OD_circle[0],ID_circle[0]])
-    y = np.mean([OD_circle[1],ID_circle[1]])
-    r = OD_circle[2] - 3  # Trim smaller edge to remove noisy data, because user has already done this
+    if True:
+        title = 'Coordinates ' + str(circle[0][0])
+        fig, ax = plt.subplots()
+        ax.imshow(data)
+#        artist1 = plt.Circle((OD_circle[0], OD_circle[1]), OD_circle[2], fill=False)
+        artist1 = plt.Circle((x, y), r, fill=False)
+        ax.add_artist(artist1)
+        fig.suptitle(title)
+        ax.set_aspect('equal')
+        plt.show()
 
     x1 = np.round(x-r)
     x2 = np.round(x+r)
     y1 = np.round(y-r)
     y2 = np.round(y+r)
-
-    if False:   #Plot to verify cropping
-        fig, ax = plt.subplots()
-        img_plot = img.copy()
-        img_plot[int(y1):int(y2), int(x1):int(x2)] = 0
-        ax.imshow(img_plot)
-        artist1 = plt.Circle((OD_circle[0], OD_circle[1]), r, fill=False)
-        artist2 = plt.Circle((ID_circle[0], ID_circle[1]), ID_circle[2], fill=False)
-        ax.add_artist(artist1)
-        ax.add_artist(artist2)
-        ax.set_aspect('equal')
-        plt.show()
 
     data_crop = data[int(y1):int(y2)+1, int(x1):int(x2)+1]
 
@@ -357,9 +345,7 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
         zi[coords[j][0]][coords[j][1]] = np.nan  #
 
     M = zi.flatten(), zi
-
     C = Zernike_decomposition(Z, M, -1)  # Zernike fit
-
     f.close()
 
     if normal_tip_tilt_power:
@@ -400,6 +386,20 @@ def Zernike_decomposition(Z,M,n):
     Surf = np.dot(Z[1][:,:,0:n],Zernike_coefficients) #Calculates best fit surface to Zernike modes
     
     return Surf.flatten(),Surf,Zernike_coefficients #returns the vector containing Zernike coefficients and the generated surface in tuple form       
+
+def initial_crop(img,ksize):
+    #Obsolete - realized this was dumb. Could be used to simplify automated import
+    img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
+
+    OD_circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+                              param1=20, param2=15, minRadius=100,
+                              maxRadius=800)[0][0]  # Output in (x_center,y_center,radius)
+    x_dist = np.arange(img.shape[0])
+    y_dist = np.arange(img.shape[1])
+    x,y = np.meshgrid(x_dist, y_dist)
+    distance = np.sqrt(np.sum([np.power(x-OD_circle[0],2), np.power(y-OD_circle[1],2)],0))
+    img[distance > OD_circle[2]] = np.max(img)
+    return img
 
 
 def Heat_loads(W,I,T_a):  #calculate heat loads, input (influence function matrix, Zernike fit to measured surface, ambient temperature in celsius)
