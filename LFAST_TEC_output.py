@@ -362,6 +362,111 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     return Surf.flatten(), Surf  # return 1D flattened surface and 2D surface
 
 
+def measure_h5_circle(filename):
+    #Fix the problems with different pupil definitions between measurement sets causing junk difference data during averaging
+    #Only import the file and guess at the pupil coordinates
+    #In another function, apply the average coordinates to every measurement
+
+    f = h5py.File(filename, 'r')
+    data = np.array(list(f['measurement0']['genraw']['data']))
+    f.close()
+
+    invalid = np.nanmax(data)
+
+    data[data == invalid] = np.nan  # remove invalid values
+    data = data * (632.8 / 1000)  # convert from waves to um
+
+    #Crop image to a square aspect ratio
+    asymmetry = np.max(data.shape)-np.min(data.shape)
+    index = np.argmax(data.shape)
+    if index == 0:
+        data = data[int(np.floor(asymmetry/2)):-int(np.floor(asymmetry/2)),:]
+    else:
+        data = data[:,int(np.floor(asymmetry / 2)):-int(np.ceil(asymmetry / 2))]
+
+    scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
+    scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
+    scale[scale == 0] = 1  #
+
+    circle_holder = []
+    for ksize in [61,81,101]:
+        img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
+        img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
+        fudge = 0
+        circle = None
+        while circle is None:
+            circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
+                                  param1=20, param2=15, minRadius=168,
+                                  maxRadius=182)  # Output in (x_center,y_center,radius)
+            fudge = fudge + 1
+        circle_holder.append(circle[0][0])
+
+    #Plot to see if the circle detection is working
+    x = np.median(circle_holder,0)[0]
+    y = np.median(circle_holder,0)[1]
+    r = np.min(circle_holder,0)[2]-1  # Trim smaller edge to remove noisy data, because user has already done this
+    circle_coord = [x,y,r]
+
+    return data, circle_coord
+
+def format_data_from_avg_circle(data,circle_coord, Z, normal_tip_tilt_power=True, remove_coef=[]):
+    #Apply averaged circle measurements from a measurement set to the data
+    #This doesn't fix inconsistent user crops, but should clean up the difference data.
+
+    clear_aperture_radius = 15.2 * 25.4 * 1e3  # Mirror radius that is not covered by TEC
+    pixel_OD = 14.95 * 25.4 * 1e3 # Coated mirror radius
+    pixel_ID = 1.8 * 25.4 * 1e3 #Coated ID
+
+    x = circle_coord[0]
+    y = circle_coord[1]
+    r = circle_coord[2]
+
+    x1 = np.round(x-r)
+    x2 = np.round(x+r)
+    y1 = np.round(y-r)
+    y2 = np.round(y+r)
+
+    data_crop = data[int(y1):int(y2)+1, int(x1):int(x2)+1]
+
+    zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
+    zs_cropped_copy = zs_cropped.copy()
+    zs_cropped_copy[np.isnan(zs_cropped_copy)] = 0
+
+    #Define grid that the measurement is using
+    xs = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped[0]))
+    ys = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped.transpose()[0]))
+
+    Z_int = interpolate.RectBivariateSpline(ys, xs, zs_cropped_copy)
+
+    #Interpolate measurement onto a 500x500 grid
+    xi = yi = np.linspace(-clear_aperture_radius, clear_aperture_radius, 500)
+    X, Y = np.meshgrid(xi, yi)
+
+    zi = Z_int(Y, X, grid=False)  # truncate to clear aperture radius
+
+    test = np.sqrt(X ** 2 + Y ** 2)  #
+    inds = np.where((test > pixel_OD) | (test < pixel_ID))  #
+    coords = list(zip(inds[0], inds[1]))  # remove data points outside of clear aperture
+    for j, m in enumerate(coords):  #
+        zi[coords[j][0]][coords[j][1]] = np.nan  #
+
+    M = zi.flatten(), zi
+    C = Zernike_decomposition(Z, M, -1)  # Zernike fit
+
+    if normal_tip_tilt_power:
+        Piston = (Z[1].transpose(2, 0, 1)[0]) * C[2][0]  #
+        TiltY = (Z[1].transpose(2, 0, 1)[1]) * C[2][1]  # remove piston, tip/tilt, and power
+        TiltX = (Z[1].transpose(2, 0, 1)[2]) * C[2][2]  #
+        Power = (Z[1].transpose(2, 0, 1)[4]) * C[2][4]  #
+
+        Surf = M[1] - Piston - TiltX - TiltY - Power  ##remove piston, tip/tilt, and power
+    elif len(remove_coef) > 0:
+        Surf = remove_modes(M, C, Z, remove_coef)
+    else:
+        print('Strange things are afoot')
+    return Surf.flatten(), Surf  # return 1D flattened surface and 2D surface
+
+
 def Zernike_decomposition(Z,M,n):
     
     Z_processed = Z[0].copy()[:,0:n]
@@ -596,3 +701,13 @@ def remove_modes(M,C,Z,remove_coef):
             plt.show()
     Surf = M[1] - removal
     return Surf
+
+def write_eigenvalues_to_csv(write_path,eigenvalues):
+    data = [['TEC','cmd','enabled']]
+    for i in range(len(eigenvalues)):
+        data.append([i+1,eigenvalues[i],1])
+
+    with open(write_path, 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile, delimiter=',')
+        for line in data:
+            csvwriter.writerow(line)

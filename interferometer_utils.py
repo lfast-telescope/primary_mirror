@@ -13,7 +13,7 @@ def take_interferometer_measurements(path,num_avg=10, onboard_averaging=True, sa
         payload = {"analysis": "analyzed", "fileName": path + savefile, "count": str(num_avg)}
         meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/AverageMeasure', params=payload)
         sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/SaveArray', params=payload)
-        print(time.time()-tic, ' seconds to measure, analyze + save')
+        print(str(round(time.time()-tic,3)), ' seconds to measure, analyze + save')
     else:
         time_folder = path + current_time + '/'
         os.mkdir(time_folder)
@@ -22,7 +22,7 @@ def take_interferometer_measurements(path,num_avg=10, onboard_averaging=True, sa
             payload = {"analysis": "analyzed", "fileName": time_folder + str(i)}
             meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/Measure', params=payload)
             sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/SaveArray', params=payload)
-        print(time.time()-tic, ' seconds to measure, analyze + save')
+        print(str(round(time.time()-tic,3)), ' seconds to measure, analyze + save')
 
 def take_interferometer_coefficients(num_avg=10):
     current_time = datetime.datetime.now().strftime('%H%M%S')

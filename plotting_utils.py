@@ -201,7 +201,7 @@ def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z
     title_y = 0.9
     plt.show()
 
-def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_plot = False, include_radial_average = False, subtitles = None):
+def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_plot = False, include_radial_average = False, subtitles = None, plot_bounds = None):
     #make mirror data for new profile
     plot_ref_new = avg_ref_new.copy()*1000
     vals_new = plot_ref_new[~np.isnan(plot_ref_new)]
@@ -218,9 +218,15 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
 
     #make difference map and determine shared scale / contour interval    
     plot_ref_diff = plot_ref_new - plot_ref_old
-    
-    left_bound = np.min([left_bound_new,left_bound_old])
-    right_bound = np.max([right_bound_new,right_bound_old])
+
+
+    if plot_bounds:
+        left_bound = -plot_bounds
+        right_bound = plot_bounds
+    else:
+        left_bound = np.min([left_bound_new,left_bound_old])
+        right_bound = np.max([right_bound_new,right_bound_old])
+
     if np.mean(np.diff(contour_levels_new)) > np.mean(np.diff(contour_levels_old)):
         contour_levels = contour_levels_new
     else:
@@ -286,6 +292,7 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     plt.yticks([])
     
     fig.suptitle(title ,size=12,y=title_y)
+    plt.show()
 
 def plot_zernike_modes_as_bar_chart(C,C2 = None, num_modes=15,coef_list = [3,5,12,24,40,60,84], labels = ['After','Before']):
     modes = C[2][:num_modes]*1000

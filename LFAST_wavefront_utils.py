@@ -155,7 +155,7 @@ def add_defocus(avg_ref, Z, amplitude=1):
 
 
 def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=None, use_best_focus=False,
-                        wavelengths=[632e-9]):
+                        wavelengths=[632.8e-9]):
     #Define measured surface as a wavefront and do Fraunhofer propagation to evaluate at focal plane
 
     prop_ref = avg_ref.copy()
@@ -280,10 +280,13 @@ def add_tec_influences(updated_surface, eigenvectors, eigenvalues):
     
 def optimize_TECs(updated_surface,eigenvectors,eigenvalues,eigenvalue_bounds,clear_aperture_outer,clear_aperture_inner,Z,metric = 'rms'):
     #Choose set of eigenvalues that minimize mirror surface error, either based on rms error or encircled energy
+    current_eigenvalues = eigenvalues.copy()
     if metric == 'rms':
         res = minimize(rms_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors))#, method='bounded', bounds = eigenvalue_bounds)
     elif metric == 'EE':
         res = minimize(EE_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,clear_aperture_outer,clear_aperture_inner,Z))#, method='bounded', bounds = eigenvalue_bounds)
+    elif metric == 'rms_neutral':
+        res = minimize(rms_neutral_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,current_eigenvalues))#, method='bounded', bounds = eigenvalue_bounds)
     else:
         print('Bruh, how many methods do you want?')
         return updated_surface, eigenvalues
@@ -299,9 +302,21 @@ def rms_objective_function(eigenvectors, updated_surface,
     reduced_surface = add_tec_influences(updated_surface, eigenvectors, eigenvalues)
     vals = reduced_surface[~np.isnan(reduced_surface)]
     rms = np.sqrt(np.sum(np.power(vals, 2)) / len(vals)) * 1000
-    if True:
+    if False:
         print('rms error is ' + str(round(rms, 3)) + 'nm')
     return rms
+
+def rms_neutral_objective_function(eigenvectors, updated_surface,
+                           eigenvalues, current_eigenvalues):  #takes input, applies operations, returns a single number
+    #Objective function for TEC optimization, reduces mirror rms error
+    reduced_surface = add_tec_influences(updated_surface, eigenvectors, eigenvalues)
+    vals = reduced_surface[~np.isnan(reduced_surface)]
+    rms = np.sqrt(np.sum(np.power(vals, 2)) / len(vals)) * 1000
+    eigen_sum = np.nansum(eigenvectors + current_eigenvalues) #This is supposed to be eigenvalues but I've gotten confused somewhere about the order for variables in minimize() so don't judge
+    merit = rms * (1 + eigen_sum**4)**0.1
+    if True:
+        print('rms=' + str(round(rms, 3)) + 'nm, sum=' + str(round(np.abs(eigen_sum), 3)) + ', merit=' + str(round(merit, 3)))
+    return merit
 
 
 def EE_objective_function(eigenvectors, updated_surface, eigenvalues, clear_aperture_outer, clear_aperture_inner,
@@ -451,3 +466,52 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
     cropped_data[~mirror_extent] = np.nan
 
     return cropped_data, smoothed_data, mirror_extent
+
+
+# %%This code disappeared into the aether. I have no idea. Here's a half-ass approach to solving it.
+def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
+    output_plots = False
+    X, Y = np.meshgrid(x_linspace, x_linspace)
+    number_points = 10
+    angle_diff_holder = []
+    roe_holder = []
+
+    for tec_response in tec_responses:
+        tec_num = tec_response[0]['TEC number']
+        nominal_x = nominal_TEC_locs.loc[tec_num - 1]['X (m)']
+        nominal_y = nominal_TEC_locs.loc[tec_num - 1]['Y (m)']
+        nominal_angle = np.arctan2(nominal_y, nominal_x)
+        angle = []
+        roe = []
+        for index in [1]:
+            x_holder = []
+            y_holder = []
+            delta = tec_response[index]['delta']
+            sorted_vals = np.sort(np.abs(delta), None)
+            sorted_vals = sorted_vals[~np.isnan(sorted_vals)]
+            for i in np.arange(number_points):
+                coord = np.where(np.abs(delta) == sorted_vals[-i])
+                x_holder.append(x_linspace[coord[1][0]])
+                y_holder.append(x_linspace[coord[0][0]])
+
+            x_loc = np.median(x_holder)
+            y_loc = np.median(y_holder)
+            angle.append(np.arctan2(y_loc, x_loc))
+            roe.append(np.sqrt(np.sum([np.power(x_loc, 2), np.power(y_loc, 2)])))
+
+            if output_plots:
+                fig, ax = plt.subplots()
+                ax.pcolormesh(x_linspace, x_linspace, tec_response[index]['delta'])
+                ax.set_aspect('equal')
+                plt.title(
+                    'Angle is ' + str(round(angle[-1] * 180 / np.pi)) + ' and distance is ' + str(round(roe[-1], 2)))
+                plt.scatter(x_loc, y_loc)
+                plt.show()
+
+        angle_diff = nominal_angle - np.mean(angle)
+        angle_diff_holder.append(angle_diff)
+        roe_holder.append(np.mean(roe))
+
+    angle_diff = np.mean(angle_diff_holder)
+    roe = np.mean(roe_holder)
+    return angle_diff, roe
