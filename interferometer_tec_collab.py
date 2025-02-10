@@ -13,6 +13,7 @@ number_frames_avg = 30
 number_averaged_frames = 5
 
 gain = 0.5
+#%%
 s = smc100('COM3',nchannels=3)
 #%%
 remove_coef = [0]
@@ -25,18 +26,23 @@ s_gain = 0.5
 
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
-mirror_path = 'C:/Users/lfast-admin/Documents/mirrors/M9/'
+mirror_path = 'C:/Users/lfast-admin/Documents/mirrors/M8/'
 folder_name = datetime.datetime.now().strftime('%Y%m%d')
 if not os.path.exists(mirror_path + folder_name): os.mkdir(mirror_path + folder_name)
 folder_path = mirror_path + folder_name + '/'
+#%%
+for i in np.arange(10):
+    s.setPositionAbs(0,3)
+    s.setPositionAbs(25,3)
 
 
-start_alignment(1,number_frames_avg,s,s_gain)
+
+#start_alignment(3,number_frames_avg,s,s_gain)
 
 #%%
 tic = time.time()
 for num in np.arange(number_averaged_frames):
-    take_interferometer_measurements(folder_path, num_avg=number_frames_avg, onboard_averaging=True,savefile='calibration')
+    take_interferometer_measurements(folder_path, num_avg=number_frames_avg, onboard_averaging=True,savefile=str(num+1))
 
 test_duration = time.time() - tic
 

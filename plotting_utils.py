@@ -140,7 +140,7 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
                 cs = radial_profile(vals_term,0.005)
                 axs[0].plot(cs[0],cs[1],'--',label=name)
                 
-    axs[0].legend(loc='lower left',fontsize='xx-small')
+    axs[0].legend(fontsize='xx-small')
     left_bound,right_bound,contour_levels = compute_cmap_and_contour(vals)
     
     contour_interval = int(np.mean(np.diff(contour_levels)))
