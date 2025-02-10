@@ -400,7 +400,7 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
     mirror_radius = object_diameter / 2
     overfill = 0
     gauss_filter_radius = 5
-    sigma = 3  # size in pixels for Gaussian blurring
+    sigma = 5  # size in pixels for Gaussian blurring
     ca_OD = 30
     ca_ID = 3
 
