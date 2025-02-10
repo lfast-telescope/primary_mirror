@@ -27,7 +27,7 @@ def take_interferometer_measurements(path,num_avg=10, onboard_averaging=True, sa
 def take_interferometer_coefficients(num_avg=10):
     current_time = datetime.datetime.now().strftime('%H%M%S')
     savefile = current_time
-    payload = {"analysis": "zernikefit", "count": str(num_avg), "useNAN": 'false'}
+    payload = {"analysis": "zernikeresidual", "count": str(num_avg), "useNAN": 'false'}
     meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/AverageMeasure', params=payload)
     sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/GetZernikeCoeff', params=payload)
     output = sav.content.decode('utf-8')

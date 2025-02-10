@@ -384,6 +384,22 @@ def measure_h5_circle(filename):
     else:
         data = data[:,int(np.floor(asymmetry / 2)):-int(np.ceil(asymmetry / 2))]
 
+    valid_coords = np.where(~np.isnan(data))
+    com_x = np.mean(valid_coords[1], axis=0)
+    com_y = np.mean(valid_coords[0], axis=0)
+    cs_x = data[:,int(com_x)]
+    cs_y = data[int(com_y),:]
+
+    ID_xy = []
+    for cs in [cs_x, cs_y]:
+        cs_valid = np.where(~np.isnan(cs))[0]
+        list_diff = np.diff(cs_valid)
+        ID_xy.append(np.sort(list_diff)[::-1][0])
+
+    OD_xy = [np.max(valid_coords[0])-np.min(valid_coords[0]),np.max(valid_coords[1])-np.min(valid_coords[1])]
+    OD = np.mean(OD_xy)
+    ID = np.mean(ID_xy)
+
     scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
     scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
     scale[scale == 0] = 1  #
@@ -395,11 +411,11 @@ def measure_h5_circle(filename):
         fudge = 0
         circle = None
         while circle is None:
-            circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
-                                  param1=20, param2=15, minRadius=135,
-                                  maxRadius=155)  # Output in (x_center,y_center,radius)
-            fudge = fudge + 1
-        circle_holder.append(circle[0][0])
+            circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, int(OD),# Find mirror disc in data array
+                                  param1=20, param2=15, minRadius=int(np.floor(OD/2)-fudge),
+                                  maxRadius=int(np.ceil(OD/2)+fudge))  # Output in (x_center,y_center,radius)
+        if fudge < 5:
+            circle_holder.append(circle[0][0])
 
     #Plot to see if the circle detection is working
     x = np.median(circle_holder,0)[0]
@@ -407,41 +423,78 @@ def measure_h5_circle(filename):
     r = np.min(circle_holder,0)[2]-1  # Trim smaller edge to remove noisy data, because user has already done this
     circle_coord = [x,y,r]
 
-    return data, circle_coord
+    return data, circle_coord, ID
 
-def format_data_from_avg_circle(data,circle_coord, Z, normal_tip_tilt_power=True, remove_coef=[]):
-    #Apply averaged circle measurements from a measurement set to the data
-    #This doesn't fix inconsistent user crops, but should clean up the difference data.
-
-    clear_aperture_radius = 15.2 * 25.4 * 1e3  # Mirror radius that is not covered by TEC
-    pixel_OD = 15 * 25.4 * 1e3 # Coated mirror radius
-    pixel_ID = 1.5 * 25.4 * 1e3 #Coated ID
+def define_ID(data, circle_coord, ID_threshold=0.99):
+    #Address inconsistent measurements near ID by cropping out the noisy region
 
     x = circle_coord[0]
     y = circle_coord[1]
     r = circle_coord[2]
 
-    x1 = np.round(x-r)
-    x2 = np.round(x+r)
-    y1 = np.round(y-r)
-    y2 = np.round(y+r)
+    xi = np.arange(0, data.shape[1])
+    yi = np.arange(0, data.shape[0])
+    X, Y = np.meshgrid(xi, yi)
+    distance_from_center = np.sqrt((X - x) ** 2 + (Y - y) ** 2)
+    invalid_data = np.isnan(data)
+    pix_within_aperture = distance_from_center < (r/2)
+    invalid_ID = invalid_data * pix_within_aperture
+    invalid_distances = distance_from_center * invalid_ID
+    sorted_invalid_distances = np.sort(invalid_distances[np.nonzero(invalid_distances)].ravel())
+    threshold_distance = sorted_invalid_distances[int(len(sorted_invalid_distances) * ID_threshold)]
+    data_copy = data.copy()
+    data_copy[distance_from_center < threshold_distance] = np.nan
+    return data_copy
 
-    data_crop = data[int(y1):int(y2)+1, int(x1):int(x2)+1]
+def format_data_from_avg_circle(data,circle_coord, clear_aperture_outer, clear_aperture_inner, Z, normal_tip_tilt_power=True, remove_coef=[]):
+    #Apply averaged circle measurements from a measurement set to the data
+    #This doesn't fix inconsistent user crops, but should clean up the difference data.
+
+    set_nans_to_zero = False
+
+    clear_aperture_radius = clear_aperture_outer  # Mirror radius that is not covered by TEC
+    pixel_OD = clear_aperture_outer # Coated mirror radius
+    pixel_ID = clear_aperture_inner #Coated ID
+
+    data = define_ID(data, circle_coord)
+
+    x = circle_coord[0]
+    y = circle_coord[1]
+    r = circle_coord[2]
+
+    x1 = np.floor(x-r)
+    x2 = np.ceil(x+r)
+    y1 = np.floor(y-r)
+    y2 = np.ceil(y+r)
+
+    data_crop = data[int(y1):int(y2), int(x1):int(x2)]
 
     zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
-    zs_cropped_copy = zs_cropped.copy()
-    zs_cropped_copy[np.isnan(zs_cropped_copy)] = 0
 
     #Define grid that the measurement is using
     xs = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped[0]))
     ys = np.linspace(-clear_aperture_radius, clear_aperture_radius, len(zs_cropped.transpose()[0]))
 
-    Z_int = interpolate.RectBivariateSpline(ys, xs, zs_cropped_copy)
-
     #Interpolate measurement onto a 500x500 grid
     xi = yi = np.linspace(-clear_aperture_radius, clear_aperture_radius, 500)
     X, Y = np.meshgrid(xi, yi)
 
+
+    zs_cropped_copy = zs_cropped.copy()
+
+    if set_nans_to_zero:
+        # Old method for interpolated set. Using a method that doesn't tolerate nans, so sets all nan values to 0. This creates fake splines and bad fits around the ID/OD.
+        zs_cropped_copy[np.isnan(zs_cropped_copy)] = 0
+    else:
+        # New system: use fancy new interpolation that only interpolates over a defined set of nonnan pixels. Use this as interpolation set.
+        coord = np.where(~np.isnan(data_crop))
+        tck, fp, ier, msg = interpolate.bisplrep(xs[coord[0]], ys[coord[1]], data_crop[~np.isnan(data_crop)],
+                                                 full_output=1)
+        zs_filled = interpolate.bisplev(xs, ys, tck)
+        zs_flip = np.flip(zs_filled, axis=0) #This interpolation is creating a parity change, apparently, so fix it
+        zs_cropped_copy[np.isnan(zs_cropped_copy)] = zs_flip[np.isnan(zs_cropped_copy)]
+
+    Z_int = interpolate.RectBivariateSpline(ys, xs, zs_cropped_copy)
     zi = Z_int(Y, X, grid=False)  # truncate to clear aperture radius
 
     test = np.sqrt(X ** 2 + Y ** 2)  #
@@ -701,6 +754,7 @@ def remove_modes(M,C,Z,remove_coef):
             plt.show()
     Surf = M[1] - removal
     return Surf
+
 def write_eigenvalues_to_csv(write_path,eigenvalues):
     data = [['TEC','cmd','enabled']]
     for i in range(len(eigenvalues)):
