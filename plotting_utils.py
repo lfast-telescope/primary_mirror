@@ -140,7 +140,7 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
                 cs = radial_profile(vals_term,0.005)
                 axs[0].plot(cs[0],cs[1],'--',label=name)
                 
-    axs[0].legend(loc='lower left',fontsize='xx-small')
+    axs[0].legend(loc='upper left',fontsize='xx-small')
     left_bound,right_bound,contour_levels = compute_cmap_and_contour(vals)
     
     contour_interval = int(np.mean(np.diff(contour_levels)))
@@ -247,11 +247,11 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     axs[1].contour(plot_ref_old,contour_levels,colors='w',linewidths=0.5)
     
     if subtitles:
-        axs[0].set_title(subtitles[0])
-        axs[1].set_title(subtitles[1])
+        axs[0].set_title(subtitles[0] + str(int(rms_new)) + 'nm rms')
+        axs[1].set_title(subtitles[1] + str(int(rms_old)) + 'nm rms')
     else:
-        axs[0].set_title('TECs off: ' + str(int(rms_new)) + 'nm rms')
-        axs[1].set_title('TECs on: ' + str(int(rms_old)) + 'nm rms')
+        axs[0].set_title(str(int(rms_new)) + 'nm rms')
+        axs[1].set_title(str(int(rms_old)) + 'nm rms')
     
     if include_difference_plot:
         pcm_diff = axs[2].imshow(plot_ref_diff,vmin=left_bound,vmax=right_bound)
@@ -263,7 +263,7 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     elif include_radial_average:
         grid = make_pupil_grid(plot_ref_new.shape,diameter=0.76)
         leg = ['New surface','Old surface','Difference']
-        for surf in [plot_ref_new,plot_ref_old,plot_ref_diff]:
+        for surf in [plot_ref_new,plot_ref_old]:
             vals_field = Field(surf.ravel(),grid)
             cs = radial_profile(vals_field,0.005)
             axs[2].plot(cs[0],cs[1])
@@ -275,13 +275,16 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
         axs[2].legend(leg,loc='lower left',fontsize='small')
         plot_range = -1
         title_y = 0.85
-        
+        for i in [0,1]:
+            axs[i].set_xticks([])
+            axs[i].set_yticks([])
+
     else:
         plot_range = 1
         title_y = 0.95
 
-    cbar = fig.colorbar(pcm_new,ax=axs[plot_range],shrink = 0.6)
-    cbar.set_label('nm',y=-0.15,rotation='horizontal',va='bottom',ha='right',labelpad = -20)
+    #cbar = fig.colorbar(pcm_new,ax=axs[plot_range],shrink = 0.6)
+    #cbar.set_label('nm',y=-0.15,rotation='horizontal',va='bottom',ha='right',labelpad = -20)
 
     for i in np.arange(0,plot_range):
         axs[i].set_xticks([])

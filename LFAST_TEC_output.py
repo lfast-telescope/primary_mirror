@@ -396,8 +396,8 @@ def measure_h5_circle(filename):
         circle = None
         while circle is None:
             circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, 10000,  # Find mirror disc in data array
-                                  param1=20, param2=15, minRadius=168,
-                                  maxRadius=182)  # Output in (x_center,y_center,radius)
+                                  param1=20, param2=15, minRadius=135,
+                                  maxRadius=155)  # Output in (x_center,y_center,radius)
             fudge = fudge + 1
         circle_holder.append(circle[0][0])
 
@@ -414,8 +414,8 @@ def format_data_from_avg_circle(data,circle_coord, Z, normal_tip_tilt_power=True
     #This doesn't fix inconsistent user crops, but should clean up the difference data.
 
     clear_aperture_radius = 15.2 * 25.4 * 1e3  # Mirror radius that is not covered by TEC
-    pixel_OD = 14.95 * 25.4 * 1e3 # Coated mirror radius
-    pixel_ID = 1.8 * 25.4 * 1e3 #Coated ID
+    pixel_OD = 15 * 25.4 * 1e3 # Coated mirror radius
+    pixel_ID = 1.5 * 25.4 * 1e3 #Coated ID
 
     x = circle_coord[0]
     y = circle_coord[1]
@@ -701,7 +701,6 @@ def remove_modes(M,C,Z,remove_coef):
             plt.show()
     Surf = M[1] - removal
     return Surf
-
 def write_eigenvalues_to_csv(write_path,eigenvalues):
     data = [['TEC','cmd','enabled']]
     for i in range(len(eigenvalues)):
