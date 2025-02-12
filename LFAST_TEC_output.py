@@ -408,13 +408,14 @@ def measure_h5_circle(filename):
     for ksize in [61,81,101]:
         img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
         img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
-        fudge = 0
+        fudge = 1
         circle = None
         while circle is None:
             circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, int(OD),# Find mirror disc in data array
                                   param1=20, param2=15, minRadius=int(np.floor(OD/2)-fudge),
                                   maxRadius=int(np.ceil(OD/2)+fudge))  # Output in (x_center,y_center,radius)
-        if fudge < 5:
+            fudge = fudge + 1
+        if fudge < 10:
             circle_holder.append(circle[0][0])
 
     #Plot to see if the circle detection is working

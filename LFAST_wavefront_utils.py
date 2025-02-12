@@ -51,7 +51,36 @@ def save_image_set(folder_path,Z,remove_coef = [],mirror_type='uncoated'):
             except OSError as e:
                 print('Could not import file ' + file)
     return output
- 
+
+def load_interferometer_maps(array_of_paths, Z, clear_aperture_outer, clear_aperture_inner, remove_coef=[0, 1, 2, 4], new_load_method=False, pupil_size=None):
+    array_of_outputs = []
+    for path in array_of_paths:
+        if new_load_method:
+            data_holder = []
+            coord_holder = []
+            wf_maps = []
+            wf_maps = []
+            for file in os.listdir(path):
+                if file.endswith(".h5"):
+                    data, circle_coord = measure_h5_circle(path + file)
+                    data_holder.append(data)
+                    coord_holder.append(circle_coord)
+
+            for data in data_holder:
+                if remove_coef == [0, 1, 2, 4]:
+                    wf_maps.append(format_data_from_avg_circle(data, circle_coord, Z, normal_tip_tilt_power=True)[1])
+                else:
+                    wf_maps.append(format_data_from_avg_circle(data, circle_coord, Z, normal_tip_tilt_power=False,
+                                                               remove_coef=remove_coef)[1])
+            output_ref = np.flip(np.mean(wf_maps, 0), 0)
+
+        else:
+            output_ref = process_wavefront_error(path, Z, remove_coef, clear_aperture_outer, clear_aperture_inner,
+                                                 compute_focal=False)
+
+        array_of_outputs.append(output_ref)
+    return array_of_outputs
+
 def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True,mirror_type='uncoated'): #%% Let's do some heckin' wavefront analysis!
     #Load a set of mirror height maps in a folder and average them
     references = save_image_set(path,Z,remove_coef,mirror_type)
@@ -170,7 +199,7 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
     focal_length = clear_aperture_outer * 3.5
 
     #Fiber parameters
-    fiber_radius = 17e-6/2
+    fiber_radius = 18e-6/2
     fiber_subtense = fiber_radius / focal_length
 
     grid = make_pupil_grid(500, clear_aperture_outer)
@@ -208,7 +237,13 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
     x_foc = 206265 * np.reshape(wf_foc.grid.x, grid_dims)
     y_foc = 206265 * np.reshape(wf_foc.grid.y, grid_dims)
     return output_foc, throughput, x_foc, y_foc
-
+#%%
+def deravel(field,dims=None):
+    if not dims:
+        dims = [np.sqrt(field.size).astype(int)]*2
+    new_shape = np.reshape(field,dims)
+    return np.array(new_shape)
+#%%
 
 def find_best_focus(output_ref, Z, centerpoint, scale, num_trials, clear_aperture_outer, clear_aperture_inner):
     #Dumb focus compensation algorithm: just evaluate PSF with different applied defocus
@@ -287,6 +322,8 @@ def optimize_TECs(updated_surface,eigenvectors,eigenvalues,eigenvalue_bounds,cle
         res = minimize(EE_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,clear_aperture_outer,clear_aperture_inner,Z))#, method='bounded', bounds = eigenvalue_bounds)
     elif metric == 'rms_neutral':
         res = minimize(rms_neutral_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,current_eigenvalues))#, method='bounded', bounds = eigenvalue_bounds)
+    elif metric == 'rms_bounded':
+        res = minimize(rms_bounded_objective_function,x0 = eigenvalues, args = (updated_surface,eigenvectors,current_eigenvalues))#, method='bounded', bounds = eigenvalue_bounds)
     else:
         print('Bruh, how many methods do you want?')
         return updated_surface, eigenvalues
@@ -318,6 +355,22 @@ def rms_neutral_objective_function(eigenvectors, updated_surface,
         print('rms=' + str(round(rms, 3)) + 'nm, sum=' + str(round(np.abs(eigen_sum), 3)) + ', merit=' + str(round(merit, 3)))
     return merit
 
+def rms_bounded_objective_function(eigenvectors, updated_surface, eigenvalues, current_eigenvalues):  #takes input, applies operations, returns a single number
+    #Objective function for TEC optimization, reduces mirror rms error
+    desired_max_current = 0.6
+
+    reduced_surface = add_tec_influences(updated_surface, eigenvectors, eigenvalues)
+    vals = reduced_surface[~np.isnan(reduced_surface)]
+    rms = np.sqrt(np.sum(np.power(vals, 2)) / len(vals)) * 1000
+    eigensum = np.nansum(eigenvectors + current_eigenvalues)
+
+    penalty = 1 + np.sum(np.power(np.divide(eigensum,desired_max_current), 100))
+
+    maxval = np.nanmax(eigensum) #This is supposed to be eigenvalues but I've gotten confused somewhere about the order for variables in minimize() so don't judge
+    merit = rms * penalty
+    if True:
+        print('rms=' + str(round(rms, 3)) + 'nm, max=' + str(round(maxval, 3)) + ', penalty=' + str(round(penalty, 2)))
+    return merit
 
 def EE_objective_function(eigenvectors, updated_surface, eigenvalues, clear_aperture_outer, clear_aperture_inner,
                           Z):  #takes input, applies operations, returns a single number
@@ -515,3 +568,38 @@ def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
     angle_diff = np.mean(angle_diff_holder)
     roe = np.mean(roe_holder)
     return angle_diff, roe
+
+
+def target_contrast_control(image):
+    """
+    This function is used to pre-process the target images. Primary work is
+    to improve image contrast.
+
+    INPUTS:
+        image: Input image (numpy array).
+    OUTPUTS:
+        corrected_im: Contrast-enhanced image (numpy array).
+    """
+    # Stretch the grayscale
+    image = image.astype(np.float64)
+    max_value = np.max(image)
+    min_value = np.min(image)
+    trans_im = np.uint8(255 * (image - min_value) / (max_value - min_value))
+
+    # Uncomment to visualize the stretched image
+    # plt.imshow(trans_im, cmap='gray')
+    # plt.title("Stretched Image")
+    # plt.pause(0.2)
+    # plt.close()
+
+    # Improve imaging effects using adaptive histogram equalization
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    corrected_im = clahe.apply(trans_im)
+
+    # Uncomment to visualize the contrast-enhanced image
+    # plt.imshow(corrected_im, cmap='gray')
+    # plt.title("Contrast-Enhanced Image")
+    # plt.pause(0.2)
+    # plt.close()
+
+    return corrected_im

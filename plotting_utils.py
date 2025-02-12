@@ -22,6 +22,8 @@ import os
 import matplotlib.patches as mpatches
 from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
+import matplotlib.gridspec as gridspec
+from LFAST_TEC_output import *
 
 def plot_mirror_wf_error(avg_ref,title,contour_interval=0,cmap_range = 0):
     plot_ref = avg_ref.copy()*1000
@@ -387,3 +389,30 @@ def return_zernike_name(coef):
     else:
         name = None
     return name
+
+def create_4d_plot(M,C,Z,OD):
+    coef_normal = [0,1,2,4]
+    coef_correctable = [0,1,2,3,4,5,6,9,10,14,15,20]
+
+    surface_normal = remove_modes(M,C,Z,coef_normal)
+
+    fig = plt.figure()
+    gs0 = gridspec.GridSpec(3,2)
+    gs00 = gridspec.GridSpecFromSubplotSpec(5,5,subplot_spec = gs0[0])
+    ax1 = fig.add_subplot(gs00[:-1,:-1])
+    ax2 = fig.add_subplot(gs00[-1,:-1])
+    ax3 = fig.add_subplot(gs00[:-1,-1])
+    x_cs,y_cs = create_xy_cs(surface_normal)
+    ax1.imshow(surface_normal)
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax2.plot(np.linspace(-OD/2,OD/2,x_cs.size),x_cs)
+    ax3.plot(y_cs,np.linspace(-OD/2,OD/2,y_cs.size))
+    plt.show()
+
+def create_xy_cs(surface):
+    x_mid = int(surface.shape[0]/2)
+    y_mid = int(surface.shape[1]/2)
+    x_cs = surface[x_mid,:]
+    y_cs = surface[:,y_mid]
+    return x_cs, y_cs
