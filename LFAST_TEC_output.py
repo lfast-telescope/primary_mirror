@@ -362,7 +362,7 @@ def import_cropped_4D_map(filename, Z, normal_tip_tilt_power=True, remove_coef=[
     return Surf.flatten(), Surf  # return 1D flattened surface and 2D surface
 
 
-def measure_h5_circle(filename):
+def measure_h5_circle(filename, use_optimizer=False):
     #Fix the problems with different pupil definitions between measurement sets causing junk difference data during averaging
     #Only import the file and guess at the pupil coordinates
     #In another function, apply the average coordinates to every measurement
@@ -400,23 +400,28 @@ def measure_h5_circle(filename):
     OD = np.mean(OD_xy)
     ID = np.mean(ID_xy)
 
-    scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
-    scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
-    scale[scale == 0] = 1  #
-
     circle_holder = []
-    for ksize in [61,81,101]:
-        img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
-        img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
-        fudge = 1
-        circle = None
-        while circle is None:
-            circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, int(OD),# Find mirror disc in data array
-                                  param1=20, param2=15, minRadius=int(np.floor(OD/2)-fudge),
-                                  maxRadius=int(np.ceil(OD/2)+fudge))  # Output in (x_center,y_center,radius)
-            fudge = fudge + 1
-        if fudge < 10:
-            circle_holder.append(circle[0][0])
+
+    if use_optimizer:
+        xyr = define_pupil_using_optimization(data)
+        circle_holder.append(xyr)
+    else:
+        scale = 255 * (data - np.nanmin(data)) / np.nanmax((data - np.nanmin(data)))  #
+        scale[np.isnan(scale)] = 255  # Convert data array to color scale image of vals 1-255
+        scale[scale == 0] = 1  #
+
+        for ksize in [61,81,101]:
+            img = scale.astype('uint8')  # convert data type to uint8 for Hough Gradient function
+            img = cv.medianBlur(img, ksize)  # median blurring function to help with detection
+            fudge = 1
+            circle = None
+            while circle is None:
+                circle = cv.HoughCircles(img, cv.HOUGH_GRADIENT, 1, int(OD),# Find mirror disc in data array
+                                      param1=20, param2=15, minRadius=int(np.floor(OD/2)-fudge),
+                                      maxRadius=int(np.ceil(OD/2)+fudge))  # Output in (x_center,y_center,radius)
+                fudge = fudge + 1
+            if fudge < 10:
+                circle_holder.append(circle[0][0])
 
     #Plot to see if the circle detection is working
     x = np.median(circle_holder,0)[0]
@@ -425,6 +430,41 @@ def measure_h5_circle(filename):
     circle_coord = [x,y,r]
 
     return data, circle_coord, ID
+
+def continuous_pupil_merit_function(xyr, thresh_image, inside_pupil_weight=1.4, outside_pupil_weight = 1):
+    negative_image = np.subtract(thresh_image.astype(float), np.max(thresh_image.astype(float)))*-1
+    X,Y = np.meshgrid(np.arange(thresh_image.shape[0]),np.arange(thresh_image.shape[1]))
+    proposed_pupil = np.sqrt(np.square(X-xyr[0]) + np.square(Y-xyr[1])) < xyr[2]
+    spots_inside_pupil = np.sum(thresh_image[proposed_pupil]).astype(float)
+    spots_outside_pupil = np.sum(thresh_image[~proposed_pupil]).astype(float)
+    spaces_inside_pupil = np.sum(negative_image[proposed_pupil]).astype(float)
+    spaces_outside_pupil = np.sum(negative_image[~proposed_pupil]).astype(float)
+
+    good_pupil = spots_inside_pupil**inside_pupil_weight + spaces_outside_pupil
+    bad_pupil = spots_outside_pupil**outside_pupil_weight + spaces_inside_pupil
+
+    merit = (bad_pupil - good_pupil)/(np.sum(thresh_image) + np.sum(negative_image))
+
+    if False:
+        fig,ax = plt.subplots()
+        ax.imshow(thresh_image)
+        artist = mpatches.Circle(xyr[:2],xyr[-1],fill=False,color='r')
+        ax.add_artist(artist)
+        fig.suptitle(np.round(xyr[-1],3))
+        plt.show()
+    elif False:
+        print(np.round(merit,3))
+
+    return merit
+
+def define_pupil_using_optimization(data_image):
+    thresh_image = data_image.copy()
+    thresh_image[~np.isnan(thresh_image)] = 1
+    thresh_image[np.isnan(thresh_image)] = 0
+    xyr = [int(thresh_image.shape[0]/2), int(thresh_image.shape[1]/2), int(np.max(thresh_image.shape)/4)]
+    res = minimize(continuous_pupil_merit_function, xyr, args=thresh_image, method='Nelder-Mead')
+    return res.x
+
 
 def define_ID(data, circle_coord, ID_threshold=0.99):
     #Address inconsistent measurements near ID by cropping out the noisy region
@@ -451,13 +491,15 @@ def format_data_from_avg_circle(data,circle_coord, clear_aperture_outer, clear_a
     #Apply averaged circle measurements from a measurement set to the data
     #This doesn't fix inconsistent user crops, but should clean up the difference data.
 
+    #clear_aperture_inner = 0
     set_nans_to_zero = False
 
     clear_aperture_radius = clear_aperture_outer  # Mirror radius that is not covered by TEC
     pixel_OD = clear_aperture_outer # Coated mirror radius
     pixel_ID = clear_aperture_inner #Coated ID
 
-    data = define_ID(data, circle_coord)
+    if clear_aperture_inner > 1e-6:
+        data = define_ID(data, circle_coord)
 
     x = circle_coord[0]
     y = circle_coord[1]
@@ -469,6 +511,11 @@ def format_data_from_avg_circle(data,circle_coord, clear_aperture_outer, clear_a
     y2 = np.ceil(y+r)
 
     data_crop = data[int(y1):int(y2), int(x1):int(x2)]
+
+    if True:
+        plt.imshow(data_crop)
+        plt.show()
+
 
     zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
 
@@ -489,7 +536,7 @@ def format_data_from_avg_circle(data,circle_coord, clear_aperture_outer, clear_a
     else:
         # New system: use fancy new interpolation that only interpolates over a defined set of nonnan pixels. Use this as interpolation set.
         coord = np.where(~np.isnan(data_crop))
-        tck, fp, ier, msg = interpolate.bisplrep(xs[coord[0]], ys[coord[1]], data_crop[~np.isnan(data_crop)],
+        tck, fp, ier, msg = interpolate.bisplrep(xs[coord[1]], ys[coord[0]], data_crop[~np.isnan(data_crop)],
                                                  full_output=1)
         zs_filled = interpolate.bisplev(xs, ys, tck)
         zs_flip = np.flip(zs_filled, axis=0) #This interpolation is creating a parity change, apparently, so fix it

@@ -44,6 +44,7 @@ def plot_mirror_wf_error(avg_ref,title,contour_interval=0,cmap_range = 0):
     plt.ylabel(str(int(np.mean(np.diff(contour_levels)))) + 'nm contours')
     
 def plot_mirror_and_psf(title,output_ref,output_foc,throughput,x,y, bounds = None, foc_scale = None):
+    output_foc = np.log10(output_foc)
     fig,axs = plt.subplots(1,2,width_ratios=[1,1],constrained_layout=True)
     plot_ref = output_ref.copy()*1000
     vals = plot_ref[~np.isnan(plot_ref)]
@@ -66,7 +67,7 @@ def plot_mirror_and_psf(title,output_ref,output_foc,throughput,x,y, bounds = Non
     cbar.set_label('    nm',y=-0.1,rotation='horizontal',va='bottom',ha='left')
     
     if foc_scale:
-        axs[1].pcolormesh(x,y,output_foc,cmap='inferno', vmax = foc_scale)
+        axs[1].pcolormesh(x,y,output_foc,cmap='inferno', vmax = foc_scale[0],vmin=foc_scale[1])
     else:
         axs[1].pcolormesh(x,y,output_foc,cmap='inferno')
     axs[1].set_aspect('equal')
@@ -107,13 +108,16 @@ def plot_single_mirror(title,output_ref,include_rms=False):
         fig.suptitle(title,x=title_x,y=title_y)
     plt.show()
 
-def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
+def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None,OD=None):
     fig,axs = plt.subplots(1,2,width_ratios=[1,1],constrained_layout=True)
     plot_ref = output_ref.copy()*1000
     vals = plot_ref[~np.isnan(plot_ref)]
     rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
-    
-    grid = make_pupil_grid(plot_ref.shape,diameter=0.76)
+
+    if OD is None:
+        grid = make_pupil_grid(plot_ref.shape,diameter=0.76)
+    else:
+        grid = make_pupil_grid(plot_ref.shape, diameter=OD)
     vals_field = Field(plot_ref.ravel(),grid)
     cs = radial_profile(vals_field,0.005)
 
@@ -121,7 +125,8 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
         print('Pk-pk error for ' + title + ' is ' + str(round(np.nanmax(cs[1])-np.nanmin(cs[1]),1)))            
     
     axs[0].plot(cs[0],cs[1],label = 'Surface')
-    axs[0].set_xlim(0,0.4)
+    if OD is None:
+        axs[0].set_xlim(0,0.4)
     axs[0].set_xlabel('Radial distance (m)')
     axs[0].set_ylabel('Wavefront error (nm)')
     axs[0].set_box_aspect(1)
@@ -142,7 +147,7 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
                 cs = radial_profile(vals_term,0.005)
                 axs[0].plot(cs[0],cs[1],'--',label=name)
                 
-    axs[0].legend(fontsize='xx-small')
+        axs[0].legend(fontsize='xx-small')
     left_bound,right_bound,contour_levels = compute_cmap_and_contour(vals)
     
     contour_interval = int(np.mean(np.diff(contour_levels)))
@@ -160,15 +165,18 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None):
     fig.suptitle(title,x=title_x,y=title_y)
     plt.show()
 
-def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z=None,C=None):
+def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z=None,C=None, OD=None):
     fig,axs = plt.subplots(1,1,width_ratios=[1],constrained_layout=True)
     
     for num,output_ref in enumerate(output_ref_set):
         plot_ref = output_ref.copy()*1000
         vals = plot_ref[~np.isnan(plot_ref)]
         rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
-        
-        grid = make_pupil_grid(plot_ref.shape,diameter=0.76)
+
+        if OD is None:
+            grid = make_pupil_grid(plot_ref.shape,diameter=0.76)
+        else:
+            grid = make_pupil_grid(plot_ref.shape, diameter=OD)
         vals_field = Field(plot_ref.ravel(),grid)
         cs = radial_profile(vals_field,0.005)
     
@@ -177,7 +185,8 @@ def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z
         
         axs.plot(cs[0],cs[1],label = name_set[num])
 
-    axs.set_xlim(0,0.4)
+    if OD is None:
+        axs.set_xlim(0,0.4)
     axs.set_xlabel('Radial distance (m)')
     axs.set_ylabel('Wavefront error (nm)')
     axs.set_box_aspect(1)
@@ -198,7 +207,7 @@ def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z
             axs.plot(cs[0],cs[1],'--',return_zernike_name(include_reference))
                     
     
-    axs.legend(loc='lower left',fontsize='small')    
+    axs.legend(fontsize='small')
     title_x = 0.55
     title_y = 0.9
     plt.show()
