@@ -512,10 +512,14 @@ def format_data_from_avg_circle(data,circle_coord, clear_aperture_outer, clear_a
 
     data_crop = data[int(y1):int(y2), int(x1):int(x2)]
 
-    if True:
+    if data_crop.shape[0]<data_crop.shape[1]:
+        data_crop = data_crop[:,1:]
+    elif data_crop.shape[0]>data_crop.shape[1]:
+        data_crop = data_crop[1:,:]
+
+    if False:
         plt.imshow(data_crop)
         plt.show()
-
 
     zs_cropped = np.flip(data_crop, axis=0)  # /2 #cropped image, perform parity flip
 

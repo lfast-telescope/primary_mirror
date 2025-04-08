@@ -74,12 +74,12 @@ else:
     measurement_number = len(list_of_measurements)-1
 
 save_subfolder = save_path + str(measurement_number) + '/'
-#%%
+
 if not os.path.exists(save_subfolder): os.mkdir(save_subfolder)
 
 if take_new_measurement:
     #Align beam and take measurements
-    start_alignment(1, number_frames_avg, s, s_gain)
+    start_alignment(3, number_frames_avg, s, s_gain)
 
     for num in np.arange(number_measurements):
         take_interferometer_measurements(save_subfolder, num_avg=number_frames_avg, onboard_averaging=True, savefile=str(num))
@@ -160,7 +160,7 @@ elif mirror_num == "14":
     last_test = {'path': save_subfolder,  # Last  test saved
                 'title': save_subfolder.split('/')[-3]}
 
-    subtests = [test6]
+    subtests = [last_test]
 
 for test in subtests:
     save_subfolder = test['path']
@@ -186,7 +186,7 @@ for test in subtests:
     for data in data_holder:
         wf_maps.append(format_data_from_avg_circle(data, avg_circle_coord, clear_aperture_outer, clear_aperture_inner*increased_ID_crop, Z, normal_tip_tilt_power=True)[1])
 
-    surface = np.flip(np.mean(wf_maps, 0), 0) - whiffle_tree_contribution
+    surface = np.flip(np.mean(wf_maps, 0), 0)
 
     test.update({'surface': surface})
     #np.save(fig_path + 'surface_v' + str(step_num) + '.npy', surface)
@@ -208,6 +208,7 @@ if False:
 
 plot_single_mirror('N14 ',updated_surface,include_rms=True)
 #plot_mirror_and_cs('N14 beyond clear aperture',updated_surface,Z=Z,C=C, OD=OD)
+
 #%%
 #%%
 updated_surface = remove_modes(M,C,Z,coef_correctable)
