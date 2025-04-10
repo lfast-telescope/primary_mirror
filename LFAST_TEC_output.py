@@ -445,7 +445,7 @@ def continuous_pupil_merit_function(xyr, thresh_image, inside_pupil_weight=1.4, 
 
     merit = (bad_pupil - good_pupil)/(np.sum(thresh_image) + np.sum(negative_image))
 
-    if False:
+    if True and np.random.rand()<0.1:
         fig,ax = plt.subplots()
         ax.imshow(thresh_image)
         artist = mpatches.Circle(xyr[:2],xyr[-1],fill=False,color='r')
