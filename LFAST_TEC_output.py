@@ -431,7 +431,7 @@ def measure_h5_circle(filename, use_optimizer=False):
 
     return data, circle_coord, ID
 
-def continuous_pupil_merit_function(xyr, thresh_image, inside_pupil_weight=1.4, outside_pupil_weight = 1):
+def continuous_pupil_merit_function(xyr, thresh_image, inside_pupil_weight=1, outside_pupil_weight = 1):
     negative_image = np.subtract(thresh_image.astype(float), np.max(thresh_image.astype(float)))*-1
     X,Y = np.meshgrid(np.arange(thresh_image.shape[0]),np.arange(thresh_image.shape[1]))
     proposed_pupil = np.sqrt(np.square(X-xyr[0]) + np.square(Y-xyr[1])) < xyr[2]
@@ -445,7 +445,7 @@ def continuous_pupil_merit_function(xyr, thresh_image, inside_pupil_weight=1.4, 
 
     merit = (bad_pupil - good_pupil)/(np.sum(thresh_image) + np.sum(negative_image))
 
-    if True and np.random.rand()<0.1:
+    if False and np.random.rand()<0.1:
         fig,ax = plt.subplots()
         ax.imshow(thresh_image)
         artist = mpatches.Circle(xyr[:2],xyr[-1],fill=False,color='r')

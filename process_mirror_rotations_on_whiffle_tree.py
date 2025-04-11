@@ -28,7 +28,7 @@ clear_aperture_inner = ID/2
 
 new_load_method = True
 
-base_path = 'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/M14/20250402/'
+base_path = 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/'
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
 #%%
@@ -68,12 +68,11 @@ for rotation in list_of_subfolders:
     rotation_holder.append(test)
 
 #%%
-copy_holder = []
-for test in rotation_holder:
-    if int(test["rotation"])%1 == 0:
-        copy_holder.append(test)
-copy_holder.pop()
-
+copy_holder = rotation_holder.copy()
+# for test in rotation_holder:
+#     if int(test["rotation"])%1 == 0:
+#         copy_holder.append(test)
+copy_holder.remove(copy_holder[0])
 
 surface_holder = []
 for test in copy_holder:
@@ -108,5 +107,8 @@ plt.show()
 
 
 #%%
-plot_single_mirror('Repeating test at N', avg_surface, include_rms=True)
+plot_single_mirror('Whiffle tree contribution', avg_surface, include_rms=True)
+
+
+
 
