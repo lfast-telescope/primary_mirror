@@ -23,7 +23,7 @@ import matplotlib.patches as mpatches
 from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
 import matplotlib.gridspec as gridspec
-from LFAST_TEC_output import *
+from primary_mirror.LFAST_TEC_output import *
 
 def plot_mirror_wf_error(avg_ref,title,contour_interval=0,cmap_range = 0):
     plot_ref = avg_ref.copy()*1000

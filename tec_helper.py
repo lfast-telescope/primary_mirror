@@ -1,4 +1,4 @@
-import LFAST_TEC_output
+import primary_mirror.LFAST_TEC_output
 import pandas as pd
 import time
 from datetime import datetime as dt

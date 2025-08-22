@@ -22,7 +22,7 @@ import os
 import matplotlib.patches as mpatches
 from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
-from LFAST_TEC_output import *
+from primary_mirror.LFAST_TEC_output import *
 from scipy import ndimage
 
 
