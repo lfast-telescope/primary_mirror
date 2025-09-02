@@ -305,6 +305,32 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     fig.suptitle(title ,size=12,y=title_y)
     plt.show()
 
+def plot_multiple_surfaces(mirror_num, surfaces, dates):
+    surfaces = np.multiply(surfaces, 1000)
+    vmax = np.nanmax([np.nanmax(surface) for surface in surfaces])
+    vmin = np.nanmin([np.nanmin(surface) for surface in surfaces])
+    fig, ax = plt.subplots(1, len(surfaces), figsize=(5*len(surfaces), 5))
+    im_list = []
+    for i, surface in enumerate(surfaces):
+        vals = surface[~np.isnan(surface)]
+        left_bound,right_bound,contour_levels = compute_cmap_and_contour(vals, cmap_range=[vmin, vmax])
+        rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
+        im = ax[i].imshow(surface, cmap='viridis', vmin=vmin, vmax=vmax)
+        im_list.append(im)
+        ax[i].contour(surface, contour_levels, colors='w', linewidths=0.5)
+        ax[i].set_title(f"{dates[i]}" + ' has ' + f"{rms:.0f}nm rms")
+        ax[i].axis('off')
+
+    plt.tight_layout(rect=[0, 0.05, 0.95, 0.90])  # leave space on the right for colorbar
+
+    avg_contour = np.mean(np.diff(contour_levels))
+    # Add colorbar to the right of all subplots
+    cbar = fig.colorbar(im_list[0], ax=ax, orientation='vertical', fraction=0.025, pad=0.04)
+    cbar.set_label('Wavefront error (nm)')
+    fig.suptitle(f"M{mirror_num} wavefront error during alternate polishing stroke", fontsize=16)
+    fig.supxlabel(f"{avg_contour:.0f}nm contours")
+    plt.show()
+
 def plot_zernike_modes_as_bar_chart(C,C2 = None, num_modes=15,coef_list = [3,5,12,24,40,60,84], labels = ['After','Before']):
     modes = C[2][:num_modes]*1000
     if num_modes > len(C[2]):
