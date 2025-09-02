@@ -49,7 +49,7 @@ s = smc100('COM3',nchannels=3)
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
 #%% Set up path to folder holding measurements
-base_path = 'C:/Users/lfast-admin/Documents/mirrors/'
+base_path = 'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/'
 mirror_num = '16'
 
 
@@ -210,9 +210,9 @@ M,C = get_M_and_C(surface, Z)
 remove_coef = [ 0,  1,  2, 3, 4,5,6,7,8,9,10,11,13,14]
 remove_coef = [0,1,2,4]
 remove_astig = [0,1,2,3,4,5]
-remove_radial = [0,1,2,4,12,24]
+remove_radial = [0,1,2,4,12,40]
 coef_correctable = [0, 1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 20]
-updated_surface = remove_modes(M,C,Z,remove_coef) - whiffle_tree_contribution
+updated_surface = remove_modes(M,C,Z,remove_coef)
 
 if False:
     X,Y = np.meshgrid(np.linspace(-OD/2,OD/2,surface.shape[0]),np.linspace(-OD/2,OD/2,surface.shape[0]))

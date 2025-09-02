@@ -83,7 +83,7 @@ def plot_mirror_and_psf(title,output_ref,output_foc,throughput,x,y, bounds = Non
     fig.suptitle(title + ' has ' + str(int(rms)) + 'nm rms wavefront error and ' + str(int(throughput*100)) + '% efficiency',y=0.85, size='medium')
     plt.show()
 
-def plot_single_mirror(title,output_ref,include_rms=False):
+def plot_single_mirror(title,output_ref,include_rms=False, save_path = None):
     fig,axs = plt.subplots()
     plot_ref = output_ref.copy()*1000
     vals = plot_ref[~np.isnan(plot_ref)]
@@ -106,6 +106,9 @@ def plot_single_mirror(title,output_ref,include_rms=False):
         fig.suptitle(title + ' has ' + str(int(rms)) + 'nm rms error',x=title_x,y=title_y)
     else:
         fig.suptitle(title,x=title_x,y=title_y)
+
+    if not save_path is None:
+        fig.savefig(save_path)
     plt.show()
 
 def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None,OD=None):
@@ -212,16 +215,16 @@ def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z
     title_y = 0.9
     plt.show()
 
-def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_plot = False, include_radial_average = False, subtitles = None, plot_bounds = None):
+def plot_mirrors_side_by_side(avg_ref_left, avg_ref_right,title,include_difference_plot = False, include_radial_average = False, subtitles = None, plot_bounds = None):
     #make mirror data for new profile
-    plot_ref_new = avg_ref_new.copy()*1000
+    plot_ref_new = avg_ref_left.copy()*1000
     vals_new = plot_ref_new[~np.isnan(plot_ref_new)]
     rms_new = np.sqrt(np.sum(np.power(vals_new,2))/len(vals_new))
     
     left_bound_new,right_bound_new,contour_levels_new = compute_cmap_and_contour(vals_new)
 
     #make mirror data for old profile
-    plot_ref_old = avg_ref_old.copy()*1000
+    plot_ref_old = avg_ref_right.copy()*1000
     vals_old = plot_ref_old[~np.isnan(plot_ref_old)]
     rms_old = np.sqrt(np.sum(np.power(vals_old,2))/len(vals_old))
     
@@ -229,7 +232,8 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
 
     #make difference map and determine shared scale / contour interval    
     plot_ref_diff = plot_ref_new - plot_ref_old
-
+    vals_diff = plot_ref_diff[~np.isnan(plot_ref_diff)]
+    rms_diff = np.sqrt(np.sum(np.power(vals_diff,2))/len(vals_diff))
 
     if plot_bounds:
         left_bound = -plot_bounds
@@ -267,7 +271,7 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     if include_difference_plot:
         pcm_diff = axs[2].imshow(plot_ref_diff,vmin=left_bound,vmax=right_bound)
         axs[2].contour(plot_ref_diff,contour_levels,colors='w',linewidths=0.5)
-        axs[2].set_title('Difference')
+        axs[2].set_title(str(int(rms_diff)) + 'nm rms')
     
         plot_range = 2
         title_y = 0.85
