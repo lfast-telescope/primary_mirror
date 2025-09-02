@@ -49,15 +49,14 @@ s = smc100('COM3',nchannels=3)
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
 #%% Set up path to folder holding measurements
-base_path = 'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/'
-mirror_num = '16'
-
+base_path = 'C:/Users/lfast-admin/Documents/mirrors/'
+mirror_num = '10'
 
 #Path for mirror
 mirror_path = base_path + 'M' + str(mirror_num) + '/'
 if not os.path.exists(mirror_path): os.mkdir(mirror_path)
 
-whiffle_tree_contribution = np.load(base_path + 'M' + mirror_num + '/whiffle_tree_contribution.npy')
+#whiffle_tree_contribution = np.load(base_path + 'M' + mirror_num + '/whiffle_tree/whiffle_tree_sans_radial.npy')
 
 #Path for daily measurements
 folder_name = datetime.datetime.now().strftime('%Y%m%d')
@@ -80,13 +79,12 @@ if not os.path.exists(save_subfolder): os.mkdir(save_subfolder)
 
 if take_new_measurement:
     #Align beam and take measurements
-    start_alignment(5, number_frames_avg, s, s_gain)
+    start_alignment(3, number_frames_avg, s, s_gain)
 
     for num in np.arange(number_measurements):
         take_interferometer_measurements(save_subfolder, num_avg=number_frames_avg, onboard_averaging=True, savefile=str(num))
 #%%
-
-# Load measurements sequentially to perform circle detection. Tsdfgdfsgdfsgfdhe pupil is then defined based on the coordinate average of the set.
+# Load measurements sequentially to perform circle detection. The pupil is then defined based on the coordinate average of the set.
 if mirror_num == "8":
     test1 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M8/20250116/2/', #reference, starting figure
              'title':'Start'}
@@ -137,7 +135,8 @@ elif mirror_num == "11":
 elif mirror_num == "10":
     test1 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M10/20250307/1/',  # reference, starting figure
              'title': '3/7 PM'}
-    subtests = [test1]
+    last_test = {'path': save_subfolder,  # Last  test saved
+                'title': save_subfolder.split('/')[-3]}
 
 elif mirror_num == "14":
     test1 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M14/20250326/2/',  #starting figure
@@ -161,20 +160,29 @@ elif mirror_num == "14":
     last_test = {'path': save_subfolder,  # Last  test saved
                 'title': save_subfolder.split('/')[-3]}
 
-    subtests = [last_test]
-
 elif mirror_num == "16":
-    test1 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/360/',  # starting figure
+    test0 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/rotation/0/',  # starting figure
              'title': '4/11 AM'}
-    test2 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/9/',  # figure with 90 deg CCW rotation
-             'title': '4/11 PM'}
+    test1 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/figure_testing/360/',  # starting figure
+             'title': '4/11 AM'}
+    test2 = {'path': 'C:/Users/lfast-admin/Documents/mirrors/M16/20250414/0/',
+             'title': '4/14 PM'}
     last_test = {'path': save_subfolder,  # Last  test saved
                 'title': save_subfolder.split('/')[-3]}
 
-    if False:
-        subtests = [last_test]
-    else:
-        subtests = [test1, test2]
+elif mirror_num == "18":
+    last_test = {'path': save_subfolder,  # Last  test saved
+                'title': save_subfolder.split('/')[-3]}
+
+
+elif mirror_num == "19":
+    last_test = {'path': save_subfolder,  # Last  test saved
+                'title': save_subfolder.split('/')[-3]}
+
+if True:
+    subtests = [last_test]
+else:
+    subtests = [test0, test1, test2]
 
 for test in subtests:
     save_subfolder = test['path']
@@ -194,7 +202,6 @@ for test in subtests:
 
     #Based on the defined pupil, process the measurements
     increased_ID_crop = 1.25
-
     wf_maps = []
 
     for data in data_holder:
@@ -205,66 +212,66 @@ for test in subtests:
     test.update({'surface': surface})
     #np.save(fig_path + 'surface_v' + str(step_num) + '.npy', surface)
 
+#%%
 #surface = subtests[-1]["surface"]
 M,C = get_M_and_C(surface, Z)
 remove_coef = [ 0,  1,  2, 3, 4,5,6,7,8,9,10,11,13,14]
 remove_coef = [0,1,2,4]
 remove_astig = [0,1,2,3,4,5]
-remove_radial = [0,1,2,4,12,40]
-coef_correctable = [0, 1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 20]
+remove_radial = [0,1,2,4,12,24]
+remove_correctable = [0, 1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 20]
+all_terms = np.arange(45)
+#all_terms = np.delete(all_terms,[3,5])
+
 updated_surface = remove_modes(M,C,Z,remove_coef)
 
-if False:
+if True:
     X,Y = np.meshgrid(np.linspace(-OD/2,OD/2,surface.shape[0]),np.linspace(-OD/2,OD/2,surface.shape[0]))
     distance_from_center = np.sqrt(np.square(X)+np.square(Y))
     pupil_boolean = (distance_from_center > 3*25.4e-3) * (distance_from_center < 15*25.4e-3)
     updated_surface[~pupil_boolean] = np.nan
 
 
-plot_single_mirror('N16 ',updated_surface,include_rms=True)
+plot_single_mirror('N' + mirror_num,updated_surface,include_rms=True)
 #plot_mirror_and_cs('N14 beyond clear aperture',updated_surface,Z=Z,C=C, OD=OD)
-
+surf_only_hot = updated_surface.copy()
 #%%
-M_avg,C_avg = get_M_and_C(avg_surface, Z)
-updated_avg_without_radial = remove_modes(M_avg,C_avg,Z,remove_radial)
-plot_single_mirror('Systematic (spherical subtracted)',updated_avg_without_radial,include_rms=True)
-plot_single_mirror('N16 ',updated_surface-updated_avg_without_radial,include_rms=True)
-
-surface_profile = updated_surface-updated_avg_without_radial
-M,C = get_M_and_C(surface_profile, Z)
-
-remove_astig = [0,1,2,3,4,5]
-updated_surface_sans = remove_modes(M,C,Z,remove_astig) - whiffle_tree_contribution
-plot_single_mirror('N16 ',updated_surface_sans,include_rms=True)
 
 
-#%%
-updated_surface = remove_modes(M,C,Z,coef_correctable)
+updated_surface = remove_modes(M,C,Z,remove_coef)
+if True:
+    X,Y = np.meshgrid(np.linspace(-OD/2,OD/2,surface.shape[0]),np.linspace(-OD/2,OD/2,surface.shape[0]))
+    distance_from_center = np.sqrt(np.square(X)+np.square(Y))
+    pupil_boolean = (distance_from_center > 1*25.4e-3) * (distance_from_center < 15*25.4e-3)
+    updated_surface[~pupil_boolean] = np.nan
+
+
+
 wf_foc, throughput, x_foc, y_foc = propagate_wavefront(updated_surface, clear_aperture_outer, clear_aperture_inner,
-                                                       Z, use_best_focus=True)
-plot_mirror_and_psf('Corrected N8 on 20250321',updated_surface,wf_foc,throughput,x_foc,y_foc,foc_scale=[-3,-5.5])
+                                                       Z, use_best_focus=False)
+plot_mirror_and_psf('Coated N10',updated_surface,wf_foc,throughput,x_foc,y_foc,foc_scale=[-3,-5.5])
 
 #%%
 test_suite = subtests.copy()
 defocus_amount = [0]*len(test_suite)
 offset = [0]*len(test_suite)
 
-test_num_1 = -2
-test_num_2 = -1
+test_num_1 = 1
+test_num_2 = 2
 
 compared_surfaces = [test_num_1,test_num_2]
 
 augmented_surfaces = []
 for num in compared_surfaces:
-    starting_surface = test_suite[num]["surface"] - updated_avg_without_radial
+    starting_surface = test_suite[num]["surface"]
     M,C = get_M_and_C(starting_surface, Z)
     remove_coef = [ 0,  1,  2, 3, 4,5,6,7,8,9,10,11,13,14]
-    remove_coef = [0,1,2,4]
+    remove_coef = [0,1,2,3,4,5]
     coef_correctable = [0, 1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 20]
-    updated_surface = remove_modes(M,C,Z,remove_coef) - whiffle_tree_contribution
-
+    updated_surface = remove_modes(M,C,Z,remove_coef)
+    plot_single_mirror(test_suite[num]["title"],updated_surface,include_rms=True)
     new_surface = add_defocus(updated_surface,Z,defocus_amount[num]) + offset[num]
-
+#%%
 
     if False:
         X, Y = np.meshgrid(np.linspace(-OD / 2, OD / 2, surface.shape[0]),
@@ -277,8 +284,9 @@ for num in compared_surfaces:
 
 delta = augmented_surfaces[1] - augmented_surfaces[0]
 
-title = 'N14 figure changes ' + str(test_suite[test_num_2]["path"].split('/')[-3])
+title = 'N' + mirror_num + ' figure changes ' + str(test_suite[test_num_2]["path"].split('/')[-4])
 name_set = [test_suite[test_num_1]["title"],test_suite[test_num_2]["title"]]
 plot_many_mirror_cs(title,augmented_surfaces,name_set,include_reference = None,Z=None,C=None,OD=OD)
 plot_mirrors_side_by_side(augmented_surfaces[1], augmented_surfaces[0], title, subtitles=['After: ','Before: '])
-plot_mirror_and_cs('Delta ' + str(test_suite[test_num_2]["path"].split('/')[-3]),delta)
+plot_mirror_and_cs('Delta ' + str(test_suite[test_num_2]["path"].split('/')[-4]),delta)
+

@@ -24,7 +24,7 @@ from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
 
 from General_zernike_matrix import General_zernike_matrix
-from LFAST_TEC_output import *
+from primary_mirror.LFAST_TEC_output import *
 from scipy import ndimage
 
 

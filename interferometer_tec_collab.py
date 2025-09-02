@@ -9,7 +9,7 @@ from LFASTfiber.libs import libThorlabs
 
 
 number_test_steps = 50
-number_frames_avg = 30
+number_frames_avg = 20
 number_averaged_frames = 5
 
 gain = 0.5
@@ -26,20 +26,13 @@ s_gain = 0.5
 
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
-mirror_path = 'C:/Users/lfast-admin/Documents/mirrors/M8/'
+mirror_path = 'C:/Users/lfast-admin/Documents/mirrors/M10/'
 folder_name = datetime.datetime.now().strftime('%Y%m%d')
 if not os.path.exists(mirror_path + folder_name): os.mkdir(mirror_path + folder_name)
 folder_path = mirror_path + folder_name + '/'
 #%%
-for i in np.arange(10):
-    s.setPositionAbs(0,3)
-    s.setPositionAbs(25,3)
+start_alignment(5,number_frames_avg,s,s_gain)
 
-
-
-#start_alignment(3,number_frames_avg,s,s_gain)
-
-#%%
 tic = time.time()
 for num in np.arange(number_averaged_frames):
     take_interferometer_measurements(folder_path, num_avg=number_frames_avg, onboard_averaging=True,savefile=str(num+1))
@@ -59,7 +52,9 @@ while not os.path.isdir(test_path):
     current_test = list_of_tec_tests[i]
     test_path = folder_path + current_test + '/'
 
-for i in np.arange(1,51):
+for i in np.arange(39,73):
+    align_period = 30
+    align_time = time.time() + align_period
     step_path = test_path + str(i) + '/'
     while not os.path.exists(step_path):
         print('Now running step ' + str(i))
@@ -73,10 +68,13 @@ for i in np.arange(1,51):
     savefile = 'tec' + str(tec_num) + '_cmd' + txt_words[9].replace('.','-')
     keep_running = True
     while keep_running:
-        start_alignment(1, number_frames_avg, s, s_gain)
-        time.sleep(3)
+        time.sleep(1)
         if time.time() - tic > duration - test_duration * 1.6:
             keep_running = False
+        else:
+            if time.time() > align_time:
+                align_time = time.time() + align_period
+                start_alignment(1, number_frames_avg, s, s_gain)
 
     for num in np.arange(number_averaged_frames):
         take_interferometer_measurements(step_path, num_avg=number_frames_avg, onboard_averaging=True, savefile=savefile + '_' + str(num))
