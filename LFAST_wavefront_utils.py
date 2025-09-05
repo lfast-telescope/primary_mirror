@@ -7,25 +7,20 @@ Created on Thu Jul 18 11:17:02 2024
 Collection of utility algorithms for mirror profiles etc
 """
 
-import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy import optimize
-from matplotlib import cm
 from scipy import interpolate
-import pickle
-import h5py
-import cv2 as cv
-from matplotlib.widgets import EllipseSelector
 import csv
 import os
-import matplotlib.patches as mpatches
 from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
-
 from General_zernike_matrix import General_zernike_matrix
-from primary_mirror.LFAST_TEC_output import *
-from scipy import ndimage
+from primary_mirror.LFAST_TEC_output import (
+    import_4D_map_auto,
+    import_cropped_4D_map, 
+    measure_h5_circle,
+    format_data_from_avg_circle
+)
 
 
 #%% Low level h5 processing and Zernike fitting
@@ -95,65 +90,6 @@ def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_apertu
     else:
         return output_ref
 
-def return_coef(C,coef_array):
-    #Print out the amplitudes of Zernike polynomials
-    try:
-        for coef in coef_array:
-            print('Z' + str(coef) + ' is ' + str(round(C[2][coef] * 1000)) + 'nm')
-    except:
-        print('Z' + str(coef_array) + ' is ' + str(round(C[2][coef_array] * 1000)) + 'nm')
-
-def return_zernike_nl(order, print_output = True):
-    #Create list of n,m Zernike indicies
-    n_holder = []
-    l_holder = []
-    coef = 0
-    for n in np.arange(0,order+1):
-        for l in np.arange(-n,n+1,2):
-            if print_output:
-                print('Z' + str(coef) + ': ' + str(n) + ', ' + str(l))
-                coef += 1
-            n_holder.append(n)
-            l_holder.append(l)
-            
-    return n_holder,l_holder
-   
-def calculate_error_per_order(M,C,Z):
-    n,l = return_zernike_nl(12,print_output = False)
-    error = []
-    
-    remove_coef = [0,1,2,4]
-    updated_surface = remove_modes(M,C,Z,remove_coef)
-    
-    vals = updated_surface[~np.isnan(updated_surface)]*1000
-    rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
-
-    coef = np.power(C[2]*1000,2)
-    
-    list_orders = np.arange(2,13)
-    output_order = list_orders.copy()
-    for order in list_orders:
-        args = np.where(n==order)
-        flag = np.where(args[0] < len(C[2]))
-        if len(flag[0]) != 0:
-            subset = coef[args]
-            error.append(np.sqrt(np.sum(subset)))
-            if False:
-                print('Order ' + str(order) + ' has ' + str(error[-1]))
-        elif len(output_order) == len(list_orders):
-            output_order = np.arange(2,order)
-                
-    residual = np.sqrt(rms**2 - np.sum(np.power(error,2)))
-    
-    plt.bar(output_order,error)
-    plt.bar(np.max(output_order+1),residual)
-    plt.xlabel('Zernike order')
-    plt.ylabel('rms wavefront error (nm)')
-    plt.title('Zernike amplitude per order')
-    plt.legend(['Fitted error', 'Higher order residual'])
-    return error, residual
-
-
 def return_neighborhood(surface, x_linspace, x_loc, y_loc, neighborhood_size):
     #For an input coordinate on the mirror [x_loc,y_loc], return the average pixel value less than neighborhood_size away  
     [X, Y] = np.meshgrid(x_linspace, x_linspace)
@@ -162,14 +98,6 @@ def return_neighborhood(surface, x_linspace, x_loc, y_loc, neighborhood_size):
     return np.nanmean(surface[neighborhood])  
   
 #%% Wavefront analysis and propagation routines
-
-def get_M_and_C(avg_ref, Z):
-    #Compute M and C surface height variables that are used for Zernike analysis
-    #M is a flattened surface map; C is a list of Zernike coefficients
-    M = avg_ref.flatten(), avg_ref
-    C = Zernike_decomposition(Z, M, -1)  #Zernike fit
-    return M, C
-
 
 def add_defocus(avg_ref, Z, amplitude=1):
     #Adds an "amplitude" amount of power to surface map; useful for focus optimization
@@ -457,36 +385,83 @@ def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
     return angle_diff, roe
 
 
-def target_contrast_control(image):
-    """
-    This function is used to pre-process the target images. Primary work is
-    to improve image contrast.
 
-    INPUTS:
-        image: Input image (numpy array).
-    OUTPUTS:
-        corrected_im: Contrast-enhanced image (numpy array).
-    """
-    # Stretch the grayscale
-    image = image.astype(np.float64)
-    max_value = np.max(image)
-    min_value = np.min(image)
-    trans_im = np.uint8(255 * (image - min_value) / (max_value - min_value))
 
-    # Uncomment to visualize the stretched image
-    # plt.imshow(trans_im, cmap='gray')
-    # plt.title("Stretched Image")
-    # plt.pause(0.2)
-    # plt.close()
+# ============================================================================
+# BACKWARD COMPATIBILITY IMPORTS - DEPRECATED
+# ============================================================================
+"""
+The following functions have been moved to shared/zernike_utils.py for better
+modularity and reuse across different measurement methods.
 
-    # Improve imaging effects using adaptive histogram equalization
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    corrected_im = clahe.apply(trans_im)
+These imports are provided for backward compatibility only.
+For new code, import directly from shared.zernike_utils.
 
-    # Uncomment to visualize the contrast-enhanced image
-    # plt.imshow(corrected_im, cmap='gray')
-    # plt.title("Contrast-Enhanced Image")
-    # plt.pause(0.2)
-    # plt.close()
+WARNING: These compatibility imports will be removed in a future version.
+"""
 
-    return corrected_im
+import warnings
+import sys
+
+def _zernike_deprecation_warning(func_name):
+    """Issue deprecation warning for moved Zernike functions."""
+    warnings.warn(
+        f"Importing {func_name} from primary_mirror.LFAST_wavefront_utils is deprecated. "
+        f"Use 'from shared.zernike_utils import {func_name}' instead. "
+        "This compatibility import will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=3
+    )
+
+def get_M_and_C(*args, **kwargs):
+    """DEPRECATED: Use shared.zernike_utils.get_M_and_C instead."""
+    _zernike_deprecation_warning('get_M_and_C')
+    
+    # Add the mirror-control path to sys.path if not already there
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from shared.zernike_utils import get_M_and_C as _func
+    return _func(*args, **kwargs)
+
+def return_zernike_nl(*args, **kwargs):
+    """DEPRECATED: Use shared.zernike_utils.return_zernike_nl instead."""
+    _zernike_deprecation_warning('return_zernike_nl')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from shared.zernike_utils import return_zernike_nl as _func
+    return _func(*args, **kwargs)
+
+def calculate_error_per_order(*args, **kwargs):
+    """DEPRECATED: Use shared.zernike_utils.calculate_error_per_order instead."""
+    _zernike_deprecation_warning('calculate_error_per_order')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from shared.zernike_utils import calculate_error_per_order as _func
+    return _func(*args, **kwargs)
+
+def return_coef(*args, **kwargs):
+    """DEPRECATED: Use shared.data_processing.return_coef instead."""
+    warnings.warn(
+        f"Importing return_coef from primary_mirror.LFAST_wavefront_utils is deprecated. "
+        f"Use 'from shared.data_processing import return_coef' instead. "
+        "This compatibility import will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from shared.data_processing import return_coef as _func
+    return _func(*args, **kwargs)
+
+
