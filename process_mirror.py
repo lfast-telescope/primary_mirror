@@ -1,8 +1,81 @@
-from LFAST_TEC_output import *
-from LFAST_wavefront_utils import *
-from plotting_utils import *
-from General_zernike_matrix import *
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import sys
+import matplotlib.gridspec as gridspec
+import matplotlib.patches as mpatches
+
+#Add parent folder to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from mirror_control.shared.General_zernike_matrix import General_zernike_matrix
+
+# Import specific functions from mirror_control modules
+from mirror_control.shared.zernike_utils import get_M_and_C, remove_modes
+from mirror_control.shared.wavefront_propagation import propagate_wavefront
+from mirror_control.interferometer.surface_processing import measure_h5_circle, format_data_from_avg_circle
+
+# Import local functions from primary_mirror modules
+from plotting_utils import create_xy_cs
+
+# Local plotting functions
+def add_text_for_subplots(fig,number_subgrids,subplot_spec,surface,pv,rms):
+    gs00 = gridspec.GridSpecFromSubplotSpec(number_subgrids, number_subgrids, subplot_spec=subplot_spec,width_ratios=[1]*number_subgrids,height_ratios=[1]*number_subgrids)
+    ax = fig.add_subplot(gs00[0,0])
+    ax.axis('off')
+    if pv > 1:
+        ax.text(0.1,0.6,'PV: ' + str(round(pv, 3)) + 'um')
+    else:
+        ax.text(0.1,0.6,'PV: ' + str(round(pv*1e3, 1)) + 'nm')
+    if rms > 1:
+        ax.text(0.1,0.5,'RMS: ' + str(round(rms, 3)) + 'um')
+    else:
+        ax.text(0.1,0.5,'RMS: ' + str(round(rms*1e3, 1)) + 'nm')
+
+def create_subplot(fig,number_subgrids,subplot_spec,surface,surface_title):
+    gs00 = gridspec.GridSpecFromSubplotSpec(number_subgrids, number_subgrids, subplot_spec=subplot_spec,width_ratios=[1]*number_subgrids,height_ratios=[1]*number_subgrids)
+    ax1 = fig.add_subplot(gs00[:-1, :-1])
+    ax2 = fig.add_subplot(gs00[-1, :-1])
+    ax3 = fig.add_subplot(gs00[:-1,-1])
+    ax_ghost = fig.add_subplot(gs00[0,:])
+    ax_ghost.axis('off')
+    ax_ghost.set_title(surface_title)
+    x_cs, y_cs = create_xy_cs(surface)
+    ax1.imshow(surface,cmap='jet')
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax2.plot(np.linspace(-OD / 2, OD / 2, x_cs.size), x_cs)
+    ax2.yaxis.grid(True)
+    ax2.set_ylabel('um',loc='top',rotation='horizontal',labelpad=-8)
+    ax3.plot(y_cs, np.linspace(-OD / 2, OD / 2, y_cs.size))
+    ax3.invert_xaxis()
+    ax3.yaxis.tick_right()
+    ax3.xaxis.grid(True)
+    ax3.set_ylabel('m',loc='bottom',rotation='horizontal')
+    ax3.yaxis.set_label_coords(1.5,-0.06)
+    return [ax1,ax2,ax3]
+
+def add_PSF_for_subplot(fig,subplot_spec,wf_foc,x_foc,y_foc):
+    gs00 = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=subplot_spec)
+    ax = fig.add_subplot(gs00[0, 0])
+    ax.pcolormesh(x_foc, y_foc, np.log10(wf_foc), cmap='inferno',vmin=np.max(np.log10(wf_foc))-3)
+
+    ax.set_aspect('equal')
+    ax.yaxis.tick_left()
+    ax.set_xlabel('arcsec')
+
+    center_coord = [0, 0]
+    patch = mpatches.Circle(center_coord, color='c', radius=0.7325, fill=False, linewidth=2)
+    ax.add_artist(patch)
+    ax.set_title('Log scale PSF')
+
+def add_text_for_PSF_subplot(fig,subplot_spec,EE_noTEC,EE_TEC):
+    gs00 = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=subplot_spec)
+    ax = fig.add_subplot(gs00[0,0])
+    ax.axis('off')
+    ax.text(-0.2,0.55,'Mirror without TEC correction\ncouples ' + str(round(EE_noTEC*1e2, 1)) + '% light into fiber', )
+    ax.text(-0.2,0.4,'With TEC correction:' + str(round(EE_TEC*1e2, 1)) + '%')
+
+
 #%%
 #Mirror parameters
 in_to_m = 25.4e-3
@@ -108,60 +181,3 @@ for test in test_suite:
     date = test['file_path'].split('/')[-3]
     plt.suptitle('Mirror #' + str(test['mirror_number']) + ' on ' + date,y=0.95)
     plt.show()
-#%%
-def add_text_for_subplots(fig,number_subgrids,subplot_spec,surface,pv,rms):
-    gs00 = gridspec.GridSpecFromSubplotSpec(number_subgrids, number_subgrids, subplot_spec=subplot_spec,width_ratios=[1]*number_subgrids,height_ratios=[1]*number_subgrids)
-    ax = fig.add_subplot(gs00[0,0])
-    ax.axis('off')
-    if pv > 1:
-        ax.text(0.1,0.6,'PV: ' + str(round(pv, 3)) + 'um')
-    else:
-        ax.text(0.1,0.6,'PV: ' + str(round(pv*1e3, 1)) + 'nm')
-    if rms > 1:
-        ax.text(0.1,0.5,'RMS: ' + str(round(rms, 3)) + 'um')
-    else:
-        ax.text(0.1,0.5,'RMS: ' + str(round(rms*1e3, 1)) + 'nm')
-
-def create_subplot(fig,number_subgrids,subplot_spec,surface,surface_title):
-    gs00 = gridspec.GridSpecFromSubplotSpec(number_subgrids, number_subgrids, subplot_spec=subplot_spec,width_ratios=[1]*number_subgrids,height_ratios=[1]*number_subgrids)
-    ax1 = fig.add_subplot(gs00[:-1, :-1])
-    ax2 = fig.add_subplot(gs00[-1, :-1])
-    ax3 = fig.add_subplot(gs00[:-1,-1])
-    ax_ghost = fig.add_subplot(gs00[0,:])
-    ax_ghost.axis('off')
-    ax_ghost.set_title(surface_title)
-    x_cs, y_cs = create_xy_cs(surface)
-    ax1.imshow(surface,cmap='jet')
-    ax1.set_xticks([])
-    ax1.set_yticks([])
-    ax2.plot(np.linspace(-OD / 2, OD / 2, x_cs.size), x_cs)
-    ax2.yaxis.grid(True)
-    ax2.set_ylabel('um',loc='top',rotation='horizontal',labelpad=-8)
-    ax3.plot(y_cs, np.linspace(-OD / 2, OD / 2, y_cs.size))
-    ax3.invert_xaxis()
-    ax3.yaxis.tick_right()
-    ax3.xaxis.grid(True)
-    ax3.set_ylabel('m',loc='bottom',rotation='horizontal')
-    ax3.yaxis.set_label_coords(1.5,-0.06)
-    return [ax1,ax2,ax3]
-
-def add_PSF_for_subplot(fig,subplot_spec,wf_foc,x_foc,y_foc):
-    gs00 = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=subplot_spec)
-    ax = fig.add_subplot(gs00[0, 0])
-    ax.pcolormesh(x_foc, y_foc, np.log10(wf_foc), cmap='inferno',vmin=np.max(np.log10(wf_foc))-3)
-
-    ax.set_aspect('equal')
-    ax.yaxis.tick_left()
-    ax.set_xlabel('arcsec')
-
-    center_coord = [0, 0]
-    patch = mpatches.Circle(center_coord, color='c', radius=0.7325, fill=False, linewidth=2)
-    ax.add_artist(patch)
-    ax.set_title('Log scale PSF')
-
-def add_text_for_PSF_subplot(fig,subplot_spec,EE_noTEC,EE_TEC):
-    gs00 = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=subplot_spec)
-    ax = fig.add_subplot(gs00[0,0])
-    ax.axis('off')
-    ax.text(-0.2,0.55,'Mirror without TEC correction\ncouples ' + str(round(EE_noTEC*1e2, 1)) + '% light into fiber', )
-    ax.text(-0.2,0.4,'With TEC correction:' + str(round(EE_TEC*1e2, 1)) + '%')

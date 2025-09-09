@@ -7,229 +7,46 @@ Created on Thu Jul 18 11:17:02 2024
 Collection of utility algorithms for mirror profiles etc
 """
 
+# === Standard library imports ===
+import os
+import sys
+import csv
+import warnings
+
+# === Third-party imports ===
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy import interpolate
-import csv
-import os
-from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
-from General_zernike_matrix import General_zernike_matrix
-from primary_mirror.LFAST_TEC_output import (
-    import_4D_map_auto,
-    import_cropped_4D_map, 
-    measure_h5_circle,
-    format_data_from_avg_circle
-)
+from hcipy import *
 
+#Add parent folder to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-#%% Low level h5 processing and Zernike fitting
-
-def save_image_set(folder_path,Z,remove_coef = [],mirror_type='uncoated'):
-    #Store a folder containing h5 files as a tuple
-    output = []
-    for file in os.listdir(folder_path):
-        if file.endswith(".h5"):
-            try:
-                if mirror_type == 'uncoated':
-                    if len(remove_coef) == 0:
-                        surf = import_4D_map_auto(folder_path + file,Z)
-                    else:
-                        surf = import_4D_map_auto(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
-                else:
-                    surf = import_cropped_4D_map(folder_path + file,Z,normal_tip_tilt_power=False,remove_coef = remove_coef)
-                output.append(surf[1])
-
-                if False:
-                    plt.imshow(surf[1])
-                    plt.colorbar()
-                    plt.title(file)
-                    plt.show()
-            except OSError as e:
-                print('Could not import file ' + file)
-    return output
-
-def load_interferometer_maps(array_of_paths, Z, clear_aperture_outer, clear_aperture_inner, remove_coef=[0, 1, 2, 4], new_load_method=False, pupil_size=None):
-    array_of_outputs = []
-    for path in array_of_paths:
-        if new_load_method:
-            data_holder = []
-            coord_holder = []
-            wf_maps = []
-            wf_maps = []
-            for file in os.listdir(path):
-                if file.endswith(".h5"):
-                    data, circle_coord = measure_h5_circle(path + file)
-                    data_holder.append(data)
-                    coord_holder.append(circle_coord)
-
-            for data in data_holder:
-                if remove_coef == [0, 1, 2, 4]:
-                    wf_maps.append(format_data_from_avg_circle(data, circle_coord, Z, normal_tip_tilt_power=True)[1])
-                else:
-                    wf_maps.append(format_data_from_avg_circle(data, circle_coord, Z, normal_tip_tilt_power=False,
-                                                               remove_coef=remove_coef)[1])
-            output_ref = np.flip(np.mean(wf_maps, 0), 0)
-
-        else:
-            output_ref = process_wavefront_error(path, Z, remove_coef, clear_aperture_outer, clear_aperture_inner,
-                                                 compute_focal=False)
-
-        array_of_outputs.append(output_ref)
-    return array_of_outputs
-
-def process_wavefront_error(path,Z,remove_coef,clear_aperture_outer,clear_aperture_inner,compute_focal = True,mirror_type='uncoated'): #%% Let's do some heckin' wavefront analysis!
-    #Load a set of mirror height maps in a folder and average them
-    references = save_image_set(path,Z,remove_coef,mirror_type)
-    avg_ref = np.flip(np.mean(references,0),0)
-    output_ref = avg_ref.copy()
-     
-    if compute_focal:
-        output_foc,throughput,x_foc,y_foc = propagate_wavefront(avg_ref,clear_aperture_outer,clear_aperture_inner,Z,use_best_focus=True)     
-        return output_ref, output_foc,throughput,x_foc,y_foc
-    else:
-        return output_ref
-
-def return_neighborhood(surface, x_linspace, x_loc, y_loc, neighborhood_size):
-    #For an input coordinate on the mirror [x_loc,y_loc], return the average pixel value less than neighborhood_size away  
-    [X, Y] = np.meshgrid(x_linspace, x_linspace)
-    dist = np.sqrt((X - x_loc) ** 2 + (Y - y_loc) ** 2)
-    neighborhood = dist < neighborhood_size
-    return np.nanmean(surface[neighborhood])  
-  
-#%% Wavefront analysis and propagation routines
-
-def add_defocus(avg_ref, Z, amplitude=1):
-    #Adds an "amplitude" amount of power to surface map; useful for focus optimization
-    power = (Z[1].transpose(2, 0, 1)[4]) * amplitude
-    left = np.min(avg_ref)
-    right = np.max(avg_ref)
-
-    if False:
-        fig, ax = plt.subplots(1, 2)
-        ax[0].imshow(avg_ref, vmin=left, vmax=right)
-        ax[1].imshow(avg_ref + power, vmin=left, vmax=right)
-        plt.show()
-    return avg_ref + power  #return 1D flattened surface and 2D surface
-
-
-def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=None, use_best_focus=False,
-                        wavelengths=[632.8e-9], fiber_diameters = None):
-    #Define measured surface as a wavefront and do Fraunhofer propagation to evaluate at focal plane
-
-    prop_ref = avg_ref.copy()
-    prop_ref[np.isnan(prop_ref)] = 0
-
-    if use_best_focus:
-        if Z == None:
-            Z = General_zernike_matrix(36, int(clear_aperture_radius * 1e6), int(ID * 1e6))
-
-        prop_ref = optimize_focus(prop_ref, Z, clear_aperture_outer, clear_aperture_inner, wavelength=[1e-6])
-
-    focal_length = clear_aperture_outer * 3.5
-    grid = make_pupil_grid(500, clear_aperture_outer)
-
-    if fiber_diameters is None:
-        #Fiber parameters
-        fiber_radius = 18e-6/2
-        fiber_subtense = fiber_radius / focal_length
-        focal_grid = make_focal_grid(15, 15, spatial_resolution=632e-9 / clear_aperture_outer)
-        eemask = Apodizer(evaluate_supersampled(make_circular_aperture(fiber_subtense * 2), focal_grid, 8))
-        prop = FraunhoferPropagator(grid, focal_grid, focal_length=focal_length)
-    else:
-        focal_grid = make_focal_grid(30, 20, spatial_resolution=632e-9 / clear_aperture_outer)
-        prop = FraunhoferPropagator(grid, focal_grid, focal_length=focal_length)
-
-    output_foc_holder = []
-    throughput_holder = []
-
-    if type(wavelengths) != list and type(wavelengths) != np.ndarray:
-        wavelengths = [wavelengths]
-        
-    for wavelength in wavelengths:    
-
-        wf = Wavefront(make_obstructed_circular_aperture(clear_aperture_outer,clear_aperture_inner/clear_aperture_outer)(grid),wavelength)
-        wf.total_power = 1
-
-        opd = Field(prop_ref.ravel() * 1e-6, grid)
-        mirror = SurfaceApodizer(opd, 2)
-        wf_opd = mirror.forward(wf)
-        wf_foc = prop.forward(wf_opd)
-        if fiber_diameters is None:
-            throughput_holder.append(eemask.forward(wf_foc).total_power)
-        else:
-            EE_holder = []
-            for diameter in fiber_diameters:
-                fiber_radius = diameter/2
-                EE_holder.append(compute_fiber_throughput(wf_foc, fiber_radius, focal_length, focal_grid))
-            throughput_holder.append(EE_holder)
-        size_foc = [int(np.sqrt(wf_foc.power.size))] * 2
-        output_foc_holder.append(np.reshape(wf_foc.power, size_foc))
-
-    if fiber_diameters is None:
-        throughput = np.mean(throughput_holder)
-    else:
-        throughput = np.mean(throughput_holder, 0)
-
-    if len(wavelengths) == 1:
-        output_foc = output_foc_holder[0]
-    else:
-        output_foc = np.mean(output_foc_holder, 0)
-
-    grid_dims = [int(np.sqrt(wf_foc.power.size))] * 2
-    x_foc = 206265 * np.reshape(wf_foc.grid.x, grid_dims)
-    y_foc = 206265 * np.reshape(wf_foc.grid.y, grid_dims)
-    return output_foc, throughput, x_foc, y_foc
-#%%
-def compute_fiber_throughput(wf_foc, fiber_radius, focal_length, focal_grid):
-    """Compute energy coupled into a circular fiber of given radius."""
-    fiber_subtense = fiber_radius / focal_length
-    fiber_mask = Apodizer(
-        evaluate_supersampled(make_circular_aperture(fiber_subtense * 2), focal_grid, 8)
+# --- mirror_control imports ---
+try:
+    from mirror_control.shared.wavefront_propagation import propagate_wavefront
+    from mirror_control.shared.General_zernike_matrix import General_zernike_matrix
+    from mirror_control.interferometer.surface_processing import (
+        import_4D_map_auto,
+        import_cropped_4D_map,
+        measure_h5_circle,
+        format_data_from_avg_circle
     )
-    return fiber_mask.forward(wf_foc).total_power
-
-def deravel(field,dims=None):
-    if not dims:
-        dims = [np.sqrt(field.size).astype(int)]*2
-    new_shape = np.reshape(field,dims)
-    return np.array(new_shape)
-#%%
-
-def find_best_focus(output_ref, Z, centerpoint, scale, num_trials, clear_aperture_outer, clear_aperture_inner):
-    #Dumb focus compensation algorithm: just evaluate PSF with different applied defocus
-    defocus_range = np.linspace(centerpoint - scale, centerpoint + scale, num_trials)
-    throughput_holder = []
-    for amplitude in defocus_range:
-        title = 'Adding ' + str(round(amplitude,2)) + ' focus '
-        defocused_avg = add_defocus(output_ref,Z,amplitude)
-        output_foc,throughput,x_foc,y_foc = propagate_wavefront(defocused_avg,clear_aperture_outer,clear_aperture_inner)
-        throughput_holder.append(throughput)         
-    if True:
-        plt.plot(defocus_range, throughput_holder)
-        plt.xlabel('Defocus')
-        plt.ylabel('Throughput')
-    best_focus = defocus_range[np.argmax(throughput_holder)]
-    return best_focus
-
-
-def optimize_focus(updated_surface, Z, clear_aperture_outer, clear_aperture_inner, wavelength):
-    #Focus optimizer
-    res = minimize_scalar(objective_function,method='bounded', bounds=[-1,1], args = (updated_surface,Z,clear_aperture_outer,clear_aperture_inner, wavelength))
-    defocused_surf= add_defocus(updated_surface,Z,amplitude=res.x)
-    defocused_surf[np.isnan(defocused_surf)] = 0 
-
-    return defocused_surf
-    
-def objective_function(amplitude,output_ref,Z,clear_aperture_outer,clear_aperture_inner, wavelength): #takes input, applies operations, returns a single number
-    #Optimization function for minimization optimization: returns negative throughput in range [0-1]
-    defocused_avg = add_defocus(output_ref, Z, amplitude)
-    output_foc, throughput, x_foc, y_foc = propagate_wavefront(defocused_avg, clear_aperture_outer,
-                                                               clear_aperture_inner, wavelengths=wavelength)
-
-    if False:
-        print('Amplitude is ' + str(amplitude) + ' and throughput is ' + str(throughput*100))
-    return -throughput
+    from mirror_control.shared.zernike_utils import get_M_and_C, remove_modes, return_coef
+    from mirror_control.interferometer import interferometer_utils
+    from mirror_control.shared import wavefront_propagation as _shared_wavefront_propagation
+except ImportError as e:
+    warnings.warn(f"mirror_control import failed: {e}. Some functionality will be unavailable.", ImportWarning)
+    propagate_wavefront = None
+    General_zernike_matrix = None
+    import_4D_map_auto = None
+    import_cropped_4D_map = None
+    measure_h5_circle = None
+    format_data_from_avg_circle = None
+    _func = None
+    interferometer_utils = None
+    _shared_wavefront_propagation = None
 
 
 #%%Synthetic TEC functions based on 4D measurements
@@ -334,8 +151,6 @@ def EE_objective_function(eigenvectors, updated_surface, eigenvalues, clear_aper
     return -float(throughput)
 
 
-
-
 # %%This code disappeared into the aether. I have no idea.
 def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
     output_plots = False
@@ -384,9 +199,6 @@ def find_global_rotation(tec_responses, nominal_TEC_locs, x_linspace):
     roe = np.mean(roe_holder)
     return angle_diff, roe
 
-
-
-
 # ============================================================================
 # BACKWARD COMPATIBILITY IMPORTS - DEPRECATED
 # ============================================================================
@@ -400,68 +212,118 @@ For new code, import directly from shared.zernike_utils.
 WARNING: These compatibility imports will be removed in a future version.
 """
 
-import warnings
-import sys
-
-def _zernike_deprecation_warning(func_name):
-    """Issue deprecation warning for moved Zernike functions."""
+def _deprecation_warning(func_name, new_location):
+    """Issue standardized deprecation warning for moved functions."""
     warnings.warn(
         f"Importing {func_name} from primary_mirror.LFAST_wavefront_utils is deprecated. "
-        f"Use 'from shared.zernike_utils import {func_name}' instead. "
+        f"Use 'from {new_location} import {func_name}' instead. "
         "This compatibility import will be removed in a future version.",
         DeprecationWarning,
         stacklevel=3
     )
 
 def get_M_and_C(*args, **kwargs):
-    """DEPRECATED: Use shared.zernike_utils.get_M_and_C instead."""
-    _zernike_deprecation_warning('get_M_and_C')
-    
-    # Add the mirror-control path to sys.path if not already there
-    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
-    if mirror_control_path not in sys.path:
-        sys.path.insert(0, mirror_control_path)
-    
-    from shared.zernike_utils import get_M_and_C as _func
-    return _func(*args, **kwargs)
+    """DEPRECATED: Use mirror_control.shared.zernike_utils.get_M_and_C instead."""
+    _deprecation_warning('get_M_and_C', 'mirror_control.shared.zernike_utils')
+    try:
+        from mirror_control.shared.zernike_utils import get_M_and_C as _func
+        return _func(*args, **kwargs)
+    except ImportError:
+        raise ImportError("mirror_control.shared.zernike_utils not found.")
 
 def return_zernike_nl(*args, **kwargs):
-    """DEPRECATED: Use shared.zernike_utils.return_zernike_nl instead."""
-    _zernike_deprecation_warning('return_zernike_nl')
-    
-    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
-    if mirror_control_path not in sys.path:
-        sys.path.insert(0, mirror_control_path)
-    
-    from shared.zernike_utils import return_zernike_nl as _func
-    return _func(*args, **kwargs)
+    """DEPRECATED: Use mirror_control.shared.zernike_utils.return_zernike_nl instead."""
+    _deprecation_warning('return_zernike_nl', 'mirror_control.shared.zernike_utils')
+    try:
+        from mirror_control.shared.zernike_utils import return_zernike_nl as _func
+        return _func(*args, **kwargs)
+    except ImportError:
+        raise ImportError("mirror_control.shared.zernike_utils not found.")
 
 def calculate_error_per_order(*args, **kwargs):
-    """DEPRECATED: Use shared.zernike_utils.calculate_error_per_order instead."""
-    _zernike_deprecation_warning('calculate_error_per_order')
-    
-    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
-    if mirror_control_path not in sys.path:
-        sys.path.insert(0, mirror_control_path)
-    
-    from shared.zernike_utils import calculate_error_per_order as _func
-    return _func(*args, **kwargs)
+    """DEPRECATED: Use mirror_control.shared.zernike_utils.calculate_error_per_order instead."""
+    _deprecation_warning('calculate_error_per_order', 'mirror_control.shared.zernike_utils')
+    try:
+        from mirror_control.shared.zernike_utils import calculate_error_per_order as _func
+        return _func(*args, **kwargs)
+    except ImportError:
+        raise ImportError("mirror_control.shared.zernike_utils not found.")
 
 def return_coef(*args, **kwargs):
     """DEPRECATED: Use shared.data_processing.return_coef instead."""
-    warnings.warn(
-        f"Importing return_coef from primary_mirror.LFAST_wavefront_utils is deprecated. "
-        f"Use 'from shared.data_processing import return_coef' instead. "
-        "This compatibility import will be removed in a future version.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    
-    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
-    if mirror_control_path not in sys.path:
-        sys.path.insert(0, mirror_control_path)
-    
-    from shared.data_processing import return_coef as _func
-    return _func(*args, **kwargs)
+    _deprecation_warning('return_coef', 'shared.zernike_utils')
+    try:
+        from mirror_control.shared.zernike_utils import return_coef as _func
+        return _func(*args, **kwargs)
+    except ImportError:
+        raise ImportError("shared.zernike_utils not found.")
 
+def save_image_set(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils.save_image_set instead."""
+    _deprecation_warning('save_image_set', 'mirror_control.interferometer.interferometer_utils')
+    if interferometer_utils is not None:
+        return interferometer_utils.save_image_set(*args, **kwargs)
+    raise ImportError("mirror_control.interferometer.interferometer_utils not found.")
 
+def process_wavefront_error(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils.process_wavefront_error instead."""
+    _deprecation_warning('process_wavefront_error', 'mirror_control.interferometer.interferometer_utils')
+    if interferometer_utils is not None:
+        return interferometer_utils.process_wavefront_error(*args, **kwargs)
+    raise ImportError("mirror_control.interferometer.interferometer_utils not found.")
+
+def load_interferometer_maps(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils.load_interferometer_maps instead."""
+    _deprecation_warning('load_interferometer_maps', 'mirror_control.interferometer.interferometer_utils')
+    if interferometer_utils is not None:
+        return interferometer_utils.load_interferometer_maps(*args, **kwargs)
+    raise ImportError("mirror_control.interferometer.interferometer_utils not found.")
+
+def add_defocus(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.add_defocus instead."""
+    _deprecation_warning('add_defocus', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.add_defocus(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def propagate_wavefront(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.propagate_wavefront instead."""
+    _deprecation_warning('propagate_wavefront', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.propagate_wavefront(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def compute_fiber_throughput(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.compute_fiber_throughput instead."""
+    _deprecation_warning('compute_fiber_throughput', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.compute_fiber_throughput(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def deravel(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.deravel instead."""
+    _deprecation_warning('deravel', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.deravel(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def find_best_focus(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.find_best_focus instead."""
+    _deprecation_warning('find_best_focus', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.find_best_focus(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def optimize_focus(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.optimize_focus instead."""
+    _deprecation_warning('optimize_focus', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.optimize_focus(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
+
+def objective_function(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.shared.wavefront_propagation.objective_function instead."""
+    _deprecation_warning('objective_function', 'mirror_control.shared.wavefront_propagation')
+    if _shared_wavefront_propagation is not None:
+        return _shared_wavefront_propagation.objective_function(*args, **kwargs)
+    raise ImportError("mirror_control.shared.wavefront_propagation module not found.")
