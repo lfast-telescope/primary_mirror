@@ -22,6 +22,8 @@ import os
 import matplotlib.patches as mpatches
 from hcipy import *
 from scipy.optimize import minimize, minimize_scalar
+
+from General_zernike_matrix import General_zernike_matrix
 from primary_mirror.LFAST_TEC_output import *
 from scipy import ndimage
 
@@ -184,7 +186,7 @@ def add_defocus(avg_ref, Z, amplitude=1):
 
 
 def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=None, use_best_focus=False,
-                        wavelengths=[632.8e-9]):
+                        wavelengths=[632.8e-9], fiber_diameters = None):
     #Define measured surface as a wavefront and do Fraunhofer propagation to evaluate at focal plane
 
     prop_ref = avg_ref.copy()
@@ -197,15 +199,18 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
         prop_ref = optimize_focus(prop_ref, Z, clear_aperture_outer, clear_aperture_inner, wavelength=[1e-6])
 
     focal_length = clear_aperture_outer * 3.5
-
-    #Fiber parameters
-    fiber_radius = 18e-6/2
-    fiber_subtense = fiber_radius / focal_length
-
     grid = make_pupil_grid(500, clear_aperture_outer)
-    focal_grid = make_focal_grid(15, 15, spatial_resolution=632e-9 / clear_aperture_outer)
-    prop = FraunhoferPropagator(grid, focal_grid, focal_length=focal_length)
-    eemask = Apodizer(evaluate_supersampled(make_circular_aperture(fiber_subtense * 2), focal_grid, 8))
+
+    if fiber_diameters is None:
+        #Fiber parameters
+        fiber_radius = 18e-6/2
+        fiber_subtense = fiber_radius / focal_length
+        focal_grid = make_focal_grid(15, 15, spatial_resolution=632e-9 / clear_aperture_outer)
+        eemask = Apodizer(evaluate_supersampled(make_circular_aperture(fiber_subtense * 2), focal_grid, 8))
+        prop = FraunhoferPropagator(grid, focal_grid, focal_length=focal_length)
+    else:
+        focal_grid = make_focal_grid(30, 20, spatial_resolution=632e-9 / clear_aperture_outer)
+        prop = FraunhoferPropagator(grid, focal_grid, focal_length=focal_length)
 
     output_foc_holder = []
     throughput_holder = []
@@ -222,11 +227,21 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
         mirror = SurfaceApodizer(opd, 2)
         wf_opd = mirror.forward(wf)
         wf_foc = prop.forward(wf_opd)
-        throughput_holder.append(eemask.forward(wf_foc).total_power)
+        if fiber_diameters is None:
+            throughput_holder.append(eemask.forward(wf_foc).total_power)
+        else:
+            EE_holder = []
+            for diameter in fiber_diameters:
+                fiber_radius = diameter/2
+                EE_holder.append(compute_fiber_throughput(wf_foc, fiber_radius, focal_length, focal_grid))
+            throughput_holder.append(EE_holder)
         size_foc = [int(np.sqrt(wf_foc.power.size))] * 2
         output_foc_holder.append(np.reshape(wf_foc.power, size_foc))
 
-    throughput = np.mean(throughput_holder)
+    if fiber_diameters is None:
+        throughput = np.mean(throughput_holder)
+    else:
+        throughput = np.mean(throughput_holder, 0)
 
     if len(wavelengths) == 1:
         output_foc = output_foc_holder[0]
@@ -238,6 +253,14 @@ def propagate_wavefront(avg_ref, clear_aperture_outer, clear_aperture_inner, Z=N
     y_foc = 206265 * np.reshape(wf_foc.grid.y, grid_dims)
     return output_foc, throughput, x_foc, y_foc
 #%%
+def compute_fiber_throughput(wf_foc, fiber_radius, focal_length, focal_grid):
+    """Compute energy coupled into a circular fiber of given radius."""
+    fiber_subtense = fiber_radius / focal_length
+    fiber_mask = Apodizer(
+        evaluate_supersampled(make_circular_aperture(fiber_subtense * 2), focal_grid, 8)
+    )
+    return fiber_mask.forward(wf_foc).total_power
+
 def deravel(field,dims=None):
     if not dims:
         dims = [np.sqrt(field.size).astype(int)]*2
@@ -396,7 +419,7 @@ def process_spherometer_grid(csv_file,size_of_square=3,number_of_squares=10,pixe
         
     sigma = 3 #size in pixels for Gaussian blurring
     
-    with open(csv_file, mode ='r') as file:    
+    with open(csv_file, mode ='r', encoding='utf-8') as file:
         reader = csv.reader(file)
         data = list(reader)            
     
@@ -448,12 +471,12 @@ def process_spherometer_grid(csv_file,size_of_square=3,number_of_squares=10,pixe
 
 
 def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.25, 2], spherometer_diameter=11.5,
-                                   object_diameter=32, number_of_pixels=256, crop_clear_aperture=False):
+                                   object_diameter=32, number_of_pixels=256, crop_clear_aperture=False,sag_unit='in'):
     spher_radius = spherometer_diameter / 2
     mirror_radius = object_diameter / 2
     overfill = 0
-    gauss_filter_radius = 5
-    sigma = 5  # size in pixels for Gaussian blurring
+    gauss_filter_radius = 7
+    sigma = 7  # size in pixels for Gaussian blurring
     ca_OD = 30
     ca_ID = 3
 
@@ -476,24 +499,33 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
 
     for meas_index, measurement_set in enumerate(data):
         radius = measurement_radius[meas_index]
-        meas_bool = [x != "0" for x in measurement_set]
+        meas_bool = [(x != "" and x != "0") for x in measurement_set]
         meas_data = [i for indx, i in enumerate(measurement_set) if meas_bool[indx]]
+
         theta = np.linspace(0, 2 * np.pi, len(meas_data), endpoint=False)
 
         for num, sag in enumerate(meas_data):
-            x_pos = radius * np.cos(theta[num])
-            y_pos = radius * np.sin(theta[num])
+            try:
+                x_pos = radius * np.cos(theta[num])
+                y_pos = radius * np.sin(theta[num])
 
-            distance_from_center = np.sqrt(np.power(X - x_pos, 2) + np.power(Y - y_pos, 2))
-            spher_extent = distance_from_center < spher_radius
-            #
-            list_data.append(float(sag))
+                distance_from_center = np.sqrt(np.power(X - x_pos, 2) + np.power(Y - y_pos, 2))
+                spher_extent = distance_from_center < spher_radius
+                #
+                if sag_unit == 'in':
+                    list_data.append(float(sag))
+                elif sag_unit == 'mm':
+                    list_data.append(float(sag))
+                else:
+                    return None, print('Sag unit ' + sag_unit + ' not recognized!')
 
-            coord = np.where(spher_extent)
+                coord = np.where(spher_extent)
 
-            for num, loc in enumerate(coord[0]):
-                index = loc * X.shape[0] + coord[1][num]
-                fill_data[index].append(float(sag))
+                for num, loc in enumerate(coord[0]):
+                    index = loc * X.shape[0] + coord[1][num]
+                    fill_data[index].append(float(sag))
+            except ValueError:
+                continue
 
     for num, val in enumerate(fill_data):
         if len(val) == 0:
@@ -506,10 +538,14 @@ def process_spherometer_concentric(csv_file, measurement_radius=[11.875, 8.5, 5.
     mirror_extent = distance_from_center < mirror_radius
     cropped_data = reshaped_data.copy()
 
+    if not sag_unit == 'in':
+        cropped_data = cropped_data / 25.4
+
     smoothed_data = ndimage.gaussian_filter(cropped_data, sigma, radius=gauss_filter_radius)
 
     if crop_clear_aperture:
         mirror_OD = distance_from_center < ca_OD/2
+        mirror_ID = distance_from_center > ca_ID/2
         mirror_ID = distance_from_center > ca_ID/2
         mirror_extent = mirror_OD * mirror_ID
     else:
