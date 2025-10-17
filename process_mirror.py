@@ -23,15 +23,39 @@ test1 = {"mirror_number":11,
          "tecs_on":False
          }
 test2 = {"mirror_number":10,
-         "file_path":'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/M10/20250211/0/',
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M10/20250212/0/',
          "tecs_on":False
          }
 test3 = {"mirror_number":11,
          "file_path":'C:/Users/warrenbfoster/OneDrive - University of Arizona/Documents/LFAST/mirrors/M11/20250205/0/',
          "tecs_on":False
          }
+test4 = {"mirror_number":11,
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M11/20250220/0/',
+         "tecs_on":False
+         }
+test5 = {"mirror_number":11,
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M11/20250224/1/',
+         "tecs_on":False
+         }
+test6 = {"mirror_number":11,
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M11/20250225/0/',
+         "tecs_on":False
+         }
+test7 = {"mirror_number":'_test_plate',
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M_test_plate/20250225/1/',
+         "tecs_on":False
+         }
+test8 = {"mirror_number":10,
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M10/20250306/0/',
+         "tecs_on":False
+         }
+test9 = {"mirror_number":10,
+         "file_path":'C:/Users/lfast-admin/Documents/mirrors/M10/20250306/3/',
+         "tecs_on":False
+         }
 
-test_suite = [test1, test2, test3]
+test_suite = [test9]
 #%%
 for test in test_suite:
     save_subfolder = test['file_path']
@@ -60,6 +84,22 @@ for test in test_suite:
     surface = np.flip(np.mean(wf_maps, 0), 0)
 
     test.update({"surface":surface})
+
+#%%
+surface = test["surface"].copy() / 2
+surface[surface < -0.065] = np.nan
+X,Y = np.meshgrid(np.linspace(-OD/2,OD/2,surface.shape[0]),np.linspace(-OD/2,OD/2,surface.shape[0]))
+distance_from_center = np.sqrt(np.square(X)+np.square(Y))
+pupil_boolean = (distance_from_center < 7.85*25.4e-3)
+surface[~pupil_boolean] = np.nan
+
+vals = surface[~np.isnan(surface)]*1e3
+sorted_vals = np.sort(vals)
+sorted_index = int(0.0001 * len(sorted_vals))  # For peak-valley, throw out the extreme tails
+pv = sorted_vals[-sorted_index] - sorted_vals[sorted_index]
+rms = np.sqrt(np.sum(np.power(vals, 2)) / len(vals))
+
+plot_single_mirror('Test plate has ' + str(round(pv)) + 'nm PV surface error',surface)
 
 #%%
 for test in test_suite:
