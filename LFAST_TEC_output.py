@@ -1,7 +1,7 @@
 """
 Low level TEC control functions and FEA-based surface correction algorithms.
 Mainly written by Nick Didato circa 2023
-Deprecated functions written by Warren Foster have been moved to mirror-control/shared/zernike_utils.py and mirror-control/shared/General_zernike_matrix.py
+Deprecated functions written by Warren Foster have been moved to mirror_control/shared/zernike_utils.py and mirror_control/shared/General_zernike_matrix.py
 """
 
 import pandas as pd
@@ -10,6 +10,8 @@ from scipy import optimize, interpolate
 import csv
 import os
 import pickle
+import sys
+from pathlib import Path
 
 
 TEC_location_file = 'TEC_centroids.csv'
@@ -260,7 +262,7 @@ def write_eigenvalues_to_csv(write_path,eigenvalues):
 
 # =============================================================================
 # BACKWARD COMPATIBILITY IMPORTS
-# The following functions have been moved to mirror-control/shared/zernike_utils.py
+# The following functions have been moved to mirror_control/shared/zernike_utils.py
 # These imports maintain compatibility for existing code
 # =============================================================================
 
@@ -273,30 +275,30 @@ def _import_from_shared_utils():
     Import functions from the shared zernike utilities with proper path resolution.
     """
     try:
-        # Try relative import from mirror-control submodule first
-        mirror_control_path = os.path.join(os.path.dirname(__file__), '..', 'mirror-control', 'shared')
+        # Try relative import from mirror_control submodule first
+        mirror_control_path = os.path.join(os.path.dirname(__file__), '..', 'mirror_control', 'shared')
         if os.path.exists(mirror_control_path) and mirror_control_path not in sys.path:
             sys.path.insert(0, mirror_control_path)
         
-        from zernike_utils import Zernike_decomposition as _Zernike_decomposition
-        from zernike_utils import remove_modes as _remove_modes
+        from mirror_control.shared.zernike_utils import Zernike_decomposition as _Zernike_decomposition
+        from mirror_control.shared.zernike_utils import remove_modes as _remove_modes
         return _Zernike_decomposition, _remove_modes
         
     except ImportError:
-        # Fallback: try to import from mirror-control if it's in the same parent directory
+        # Fallback: try to import from mirror_control if it's in the same parent directory
         try:
             parent_dir = os.path.dirname(os.path.dirname(__file__))
-            mirror_control_shared = os.path.join(parent_dir, 'mirror-control', 'shared')
+            mirror_control_shared = os.path.join(parent_dir, 'mirror_control', 'shared')
             if os.path.exists(mirror_control_shared) and mirror_control_shared not in sys.path:
                 sys.path.insert(0, mirror_control_shared)
             
-            from zernike_utils import Zernike_decomposition as _Zernike_decomposition
-            from zernike_utils import remove_modes as _remove_modes
+            from mirror_control.shared.zernike_utils import Zernike_decomposition as _Zernike_decomposition
+            from mirror_control.shared.zernike_utils import remove_modes as _remove_modes
             return _Zernike_decomposition, _remove_modes
             
         except ImportError:
             raise ImportError(
-                "Cannot import Zernike functions. Please ensure mirror-control/shared/zernike_utils.py "
+                "Cannot import Zernike functions. Please ensure mirror_control/shared/zernike_utils.py "
                 "is available. Functions have been moved from LFAST_TEC_output.py to the shared utilities."
             )
 
@@ -305,12 +307,22 @@ def _import_surface_processing_functions():
     Import functions from the interferometer surface processing utilities.
     """
     try:
-        # Try relative import from mirror-control submodule first
-        interferometer_path = os.path.join(os.path.dirname(__file__), '..', 'mirror-control', 'interferometer')
-        if os.path.exists(interferometer_path) and interferometer_path not in sys.path:
-            sys.path.insert(0, interferometer_path)
+        # First, find the workspace root (repos directory)
+        current_file = Path(__file__)
+        workspace_root = None
         
-        from surface_processing import (
+        # Look for the repos directory by finding mirror_control
+        for path in [current_file.parent] + list(current_file.parents):
+            if (path / 'mirror_control').exists():
+                workspace_root = str(path)
+                break
+        
+        if workspace_root:
+            # Add workspace root to path if not already there
+            if workspace_root not in sys.path:
+                sys.path.insert(0, workspace_root)
+        
+        from mirror_control.interferometer.surface_processing import (
             import_4D_map as _import_4D_map,
             import_4D_map_auto as _import_4D_map_auto,
             import_cropped_4D_map as _import_cropped_4D_map,
@@ -326,14 +338,14 @@ def _import_surface_processing_functions():
                 _format_data_from_avg_circle, _initial_crop)
         
     except ImportError:
-        # Fallback: try to import from mirror-control if it's in the same parent directory
+        # Fallback: try to import from mirror_control if it's in the same parent directory
         try:
             parent_dir = os.path.dirname(os.path.dirname(__file__))
-            interferometer_path = os.path.join(parent_dir, 'mirror-control', 'interferometer')
+            interferometer_path = os.path.join(parent_dir, 'mirror_control', 'interferometer')
             if os.path.exists(interferometer_path) and interferometer_path not in sys.path:
                 sys.path.insert(0, interferometer_path)
             
-            from surface_processing import (
+            from mirror_control.interferometer.surface_processing import (
                 import_4D_map as _import_4D_map,
                 import_4D_map_auto as _import_4D_map_auto,
                 import_cropped_4D_map as _import_cropped_4D_map,
@@ -350,7 +362,7 @@ def _import_surface_processing_functions():
             
         except ImportError:
             raise ImportError(
-                "Cannot import surface processing functions. Please ensure mirror-control/interferometer/surface_processing.py "
+                "Cannot import surface processing functions. Please ensure mirror_control/interferometer/surface_processing.py "
                 "is available. Functions have been moved from LFAST_TEC_output.py to the interferometer module."
             )
 
@@ -362,7 +374,7 @@ _zernike_decomposition_func, _remove_modes_func = _import_from_shared_utils()
 
 def Zernike_decomposition(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/shared/zernike_utils.py
+    DEPRECATED: This function has been moved to mirror_control/shared/zernike_utils.py
     Please update your imports to use: from mirror_control.shared.zernike_utils import Zernike_decomposition
     """
     warnings.warn(
@@ -375,7 +387,7 @@ def Zernike_decomposition(*args, **kwargs):
 
 def remove_modes(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/shared/zernike_utils.py
+    DEPRECATED: This function has been moved to mirror_control/shared/zernike_utils.py
     Please update your imports to use: from mirror_control.shared.zernike_utils import remove_modes
     """
     warnings.warn(
@@ -388,12 +400,12 @@ def remove_modes(*args, **kwargs):
 
 # =============================================================================
 # SURFACE PROCESSING BACKWARD COMPATIBILITY FUNCTIONS
-# The following functions have been moved to mirror-control/interferometer/surface_processing.py
+# The following functions have been moved to mirror_control/interferometer/surface_processing.py
 # =============================================================================
 
 def import_4D_map(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import import_4D_map
     """
     warnings.warn(
@@ -406,7 +418,7 @@ def import_4D_map(*args, **kwargs):
 
 def import_4D_map_auto(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import import_4D_map_auto
     """
     warnings.warn(
@@ -419,7 +431,7 @@ def import_4D_map_auto(*args, **kwargs):
 
 def import_cropped_4D_map(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import import_cropped_4D_map
     """
     warnings.warn(
@@ -432,7 +444,7 @@ def import_cropped_4D_map(*args, **kwargs):
 
 def measure_h5_circle(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import measure_h5_circle
     """
     warnings.warn(
@@ -445,7 +457,7 @@ def measure_h5_circle(*args, **kwargs):
 
 def continuous_pupil_merit_function(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import continuous_pupil_merit_function
     """
     warnings.warn(
@@ -458,7 +470,7 @@ def continuous_pupil_merit_function(*args, **kwargs):
 
 def define_pupil_using_optimization(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import define_pupil_using_optimization
     """
     warnings.warn(
@@ -471,7 +483,7 @@ def define_pupil_using_optimization(*args, **kwargs):
 
 def define_ID(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import define_ID
     """
     warnings.warn(
@@ -484,7 +496,7 @@ def define_ID(*args, **kwargs):
 
 def format_data_from_avg_circle(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import format_data_from_avg_circle
     """
     warnings.warn(
@@ -497,7 +509,7 @@ def format_data_from_avg_circle(*args, **kwargs):
 
 def initial_crop(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/interferometer/surface_processing.py
+    DEPRECATED: This function has been moved to mirror_control/interferometer/surface_processing.py
     Please update your imports to use: from mirror_control.interferometer.surface_processing import initial_crop
     """
     warnings.warn(

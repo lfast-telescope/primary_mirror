@@ -1,6 +1,6 @@
 # =============================================================================
 # BACKWARD COMPATIBILITY FOR General_zernike_matrix
-# This module has been moved to mirror-control/shared/General_zernike_matrix.py
+# This module has been moved to mirror_control/shared/General_zernike_matrix.py
 # This file maintains compatibility for existing imports
 # =============================================================================
 
@@ -13,8 +13,8 @@ def _import_from_shared_zernike_matrix():
     Import functions from the shared General_zernike_matrix module with proper path resolution.
     """
     try:
-        # Try relative import from mirror-control submodule first
-        mirror_control_path = os.path.join(os.path.dirname(__file__), '..', 'mirror-control', 'shared')
+        # Try relative import from mirror_control submodule first
+        mirror_control_path = os.path.join(os.path.dirname(__file__), '..', 'mirror_control', 'shared')
         if os.path.exists(mirror_control_path) and mirror_control_path not in sys.path:
             sys.path.insert(0, mirror_control_path)
         
@@ -23,10 +23,10 @@ def _import_from_shared_zernike_matrix():
         return _General_zernike_matrix, _save_zernike_matrix
         
     except ImportError:
-        # Fallback: try to import from mirror-control if it's in the same parent directory
+        # Fallback: try to import from mirror_control if it's in the same parent directory
         try:
             parent_dir = os.path.dirname(os.path.dirname(__file__))
-            mirror_control_shared = os.path.join(parent_dir, 'mirror-control', 'shared')
+            mirror_control_shared = os.path.join(parent_dir, 'mirror_control', 'shared')
             if os.path.exists(mirror_control_shared) and mirror_control_shared not in sys.path:
                 sys.path.insert(0, mirror_control_shared)
             
@@ -36,7 +36,7 @@ def _import_from_shared_zernike_matrix():
             
         except ImportError:
             raise ImportError(
-                "Cannot import General_zernike_matrix functions. Please ensure mirror-control/shared/General_zernike_matrix.py "
+                "Cannot import General_zernike_matrix functions. Please ensure mirror_control/shared/General_zernike_matrix.py "
                 "is available. Functions have been moved from primary_mirror to the shared utilities."
             )
 
@@ -45,7 +45,7 @@ _general_zernike_matrix_func, _save_zernike_matrix_func = _import_from_shared_ze
 
 def General_zernike_matrix(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/shared/General_zernike_matrix.py
+    DEPRECATED: This function has been moved to mirror_control/shared/General_zernike_matrix.py
     Please update your imports to use: from mirror_control.shared.General_zernike_matrix import General_zernike_matrix
     
     Parameters:
@@ -67,7 +67,7 @@ def General_zernike_matrix(*args, **kwargs):
 
 def save_zernike_matrix(*args, **kwargs):
     """
-    DEPRECATED: This function has been moved to mirror-control/shared/General_zernike_matrix.py
+    DEPRECATED: This function has been moved to mirror_control/shared/General_zernike_matrix.py
     Please update your imports to use: from mirror_control.shared.General_zernike_matrix import save_zernike_matrix
     
     Parameters:
