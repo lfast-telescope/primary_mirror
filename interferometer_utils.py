@@ -1,3 +1,7 @@
+"""
+This code is deprecated blah blah use mirror_control/interferometer/interferometer_utils.py instead
+"""
+
 import os
 import time
 import requests

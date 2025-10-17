@@ -1,3 +1,9 @@
+import sys
+import os
+# Add the parent directory to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
 import time
 import datetime
 from interferometer_utils import *
@@ -29,9 +35,9 @@ Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture
 mirror_path = 'C:/Users/lfast-admin/Documents/mirrors/M10/'
 folder_name = datetime.datetime.now().strftime('%Y%m%d')
 if not os.path.exists(mirror_path + folder_name): os.mkdir(mirror_path + folder_name)
-folder_path = mirror_path + folder_name + '/'
+folder_path = mirror_path + folder_name +'/'
 #%%
-start_alignment(5,number_frames_avg,s,s_gain)
+start_alignment(3,number_frames_avg,s,s_gain)
 
 tic = time.time()
 for num in np.arange(number_averaged_frames):
@@ -41,7 +47,6 @@ test_duration = time.time() - tic
 
 #%%
 input('Start TEC test')
-
 list_of_tec_tests = os.listdir(folder_path)
 
 i = -1
@@ -52,7 +57,7 @@ while not os.path.isdir(test_path):
     current_test = list_of_tec_tests[i]
     test_path = folder_path + current_test + '/'
 
-for i in np.arange(39,73):
+for i in np.arange(10,73):
     align_period = 30
     align_time = time.time() + align_period
     step_path = test_path + str(i) + '/'
@@ -69,7 +74,7 @@ for i in np.arange(39,73):
     keep_running = True
     while keep_running:
         time.sleep(1)
-        if time.time() - tic > duration - test_duration * 1.6:
+        if time.time() - tic > duration - test_duration * 2.5:
             keep_running = False
         else:
             if time.time() > align_time:

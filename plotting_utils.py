@@ -165,7 +165,7 @@ def plot_mirror_and_cs(title,output_ref,include_reference = None,Z=None,C=None,O
     fig.suptitle(title,x=title_x,y=title_y)
     plt.show()
 
-def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z=None,C=None, OD=None):
+def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z=None,C=None, OD=None, save_fig = False):
     fig,axs = plt.subplots(1,1,width_ratios=[1],constrained_layout=True)
     
     for num,output_ref in enumerate(output_ref_set):
@@ -210,6 +210,9 @@ def plot_many_mirror_cs(title,output_ref_set,name_set,include_reference = None,Z
     axs.legend(fontsize='small')
     title_x = 0.55
     title_y = 0.9
+
+    if save_fig and isstr(save_fig):
+        plt.savefig(f'{title}_cs.png', dpi=300)
     plt.show()
 
 def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_plot = False, include_radial_average = False, subtitles = None, plot_bounds = None):
@@ -305,10 +308,18 @@ def plot_mirrors_side_by_side(avg_ref_new, avg_ref_old,title,include_difference_
     fig.suptitle(title ,size=12,y=title_y)
     plt.show()
 
-def plot_multiple_surfaces(mirror_num, surfaces, dates):
+def plot_multiple_surfaces(mirror_num, surfaces, dates, enforce_symmetric_bounds = False, save_fig = False):
     surfaces = np.multiply(surfaces, 1000)
-    vmax = np.nanmax([np.nanmax(surface) for surface in surfaces])
-    vmin = np.nanmin([np.nanmin(surface) for surface in surfaces])
+    surface_vals = [surface[~np.isnan(surface)] for surface in surfaces]
+    surface_sorted = [np.sort(vals) for vals in surface_vals]
+    upper_bounds = [sorted_vals[int(len(vals)*0.99)] for sorted_vals, vals in zip(surface_sorted, surface_vals)]
+    lower_bounds = [sorted_vals[int(len(vals)*0.01)] for sorted_vals, vals in zip(surface_sorted, surface_vals)]
+    if enforce_symmetric_bounds:
+        vmax = np.nanmax([abs(np.nanmax(upper_bounds)), abs(np.nanmin(lower_bounds))])
+        vmin = -vmax
+    else:
+        vmax = np.nanmax(upper_bounds)
+        vmin = np.nanmin(lower_bounds)
     fig, ax = plt.subplots(1, len(surfaces), figsize=(5*len(surfaces), 5))
     im_list = []
     for i, surface in enumerate(surfaces):
@@ -329,6 +340,9 @@ def plot_multiple_surfaces(mirror_num, surfaces, dates):
     cbar.set_label('Wavefront error (nm)')
     fig.suptitle(f"M{mirror_num} wavefront error during alternate polishing stroke", fontsize=16)
     fig.supxlabel(f"{avg_contour:.0f}nm contours")
+    if save_fig:
+        plt.savefig(f'M{mirror_num}_surf.png', dpi=300)
+
     plt.show()
 
 def plot_zernike_modes_as_bar_chart(C,C2 = None, num_modes=15,coef_list = [3,5,12,24,40,60,84], labels = ['After','Before']):
