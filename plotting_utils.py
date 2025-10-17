@@ -1,23 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jul 18 11:26:54 2024
+DEPRECATED: Functions have been moved to mirror_control.interferometer.plotting_utils
 
-@author: warre
+This file provides backward compatibility by importing functions from their new location.
+For new code, import directly from mirror_control.interferometer.plotting_utils.
 
-Collection of plotting functions for mirror surface heights, etc
+@author: Warren Foster
 """
 
-import pandas as pd
-import numpy as np
-from matplotlib import pyplot as plt
-from scipy import optimize
-from matplotlib import cm
-from scipy import interpolate
-import pickle
-import h5py
-import cv2 as cv
-from matplotlib.widgets import EllipseSelector
-import csv
+import warnings
+import sys
 import os
 import matplotlib.patches as mpatches
 from hcipy import *
