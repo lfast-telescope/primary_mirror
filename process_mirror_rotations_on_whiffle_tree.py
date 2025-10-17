@@ -28,7 +28,8 @@ clear_aperture_inner = ID/2
 
 new_load_method = True
 
-base_path = 'C:/Users/lfast-admin/Documents/mirrors/M16/20250411/'
+base_path = 'C:/Users/lfast-admin/Documents/mirrors/M14/20250516/'
+whiffle_tree_path = 'C:/Users/lfast-admin/Documents/mirrors/M16/whiffle_tree/'
 Z = General_zernike_matrix(44,int(clear_aperture_outer * 1e6),int(clear_aperture_inner * 1e6))
 
 #%%
@@ -72,7 +73,7 @@ copy_holder = rotation_holder.copy()
 # for test in rotation_holder:
 #     if int(test["rotation"])%1 == 0:
 #         copy_holder.append(test)
-copy_holder.remove(copy_holder[0])
+#copy_holder.remove(copy_holder[0])
 
 surface_holder = []
 for test in copy_holder:
@@ -82,17 +83,34 @@ for test in copy_holder:
     test.update({"rms_raw":rms})
 
     surface_holder.append(test["surface"])
-
+#%%
 avg_surface = np.mean(surface_holder,0)
 plot_single_mirror('Average surface', avg_surface, include_rms = True)
 
+Mavg,Cavg = get_M_and_C(avg_surface,Z)
+remove_radial = [0,1,2,4,12,24,40]
+avg_surface_sans_radial = remove_modes(Mavg,Cavg,Z,remove_radial)
+plot_single_mirror('Avg surface sans radial', avg_surface_sans_radial, include_rms = True)
+
+np.save(whiffle_tree_path + 'whiffle_tree_contribution.npy', avg_surface)
+np.save(whiffle_tree_path + 'whiffle_tree_sans_radial.npy', avg_surface_sans_radial)
+
+
+#%%
+
+
+
 for test in copy_holder:
-    plot_ref = test["surface"] #- avg_surface
+    plot_ref = test["surface"] - avg_surface_sans_radial
     vals = plot_ref[~np.isnan(plot_ref)]*1000
     rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
     test.update({"rms_avg":rms})
 
-    plot_single_mirror('Mirror rotated ' + test["rotation"] + ' degrees', test["surface"], include_rms=True)
+    plot_single_mirror('Mirror rotated ' + test["rotation"] + ' degrees', plot_ref, include_rms=True)
+
+#%%
+
+
 #%%
 rms_raw = [test["rms_raw"] for test in copy_holder]
 rms_avg = [test["rms_avg"] for test in copy_holder]
@@ -102,6 +120,7 @@ plt.plot(rotation,rms_raw,label='Raw rms error',color='r')
 plt.plot(rotation,rms_avg,label='Mean-subtracted rms error',color='blue')
 plt.xlabel('Rotation position')
 plt.ylabel('Rms error(nm)')
+plt.legend()
 plt.title('Total normalized error with/without whiffle tree contribution')
 plt.show()
 
