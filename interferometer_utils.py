@@ -1,69 +1,83 @@
+"""
+Interferometer utilities - DEPRECATED
+
+This module has been moved to mirror-control/interferometer/interferometer_utils.py
+These imports are provided for backward compatibility only.
+
+For new code, use:
+    from mirror_control.interferometer.interferometer_utils import take_interferometer_measurements
+
+WARNING: This compatibility layer will be removed in a future version.
+"""
+
+import warnings
 import os
-import time
-import requests
-import datetime
-import numpy as np
+import sys
 
-def take_interferometer_measurements(path,num_avg=10, onboard_averaging=True, savefile = None):
-    current_time = datetime.datetime.now().strftime('%H%M%S')
-    if savefile is None:
-        savefile = current_time
-    if onboard_averaging:
-        tic = time.time()
-        payload = {"analysis": "analyzed", "fileName": path + savefile, "count": str(num_avg)}
-        meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/AverageMeasure', params=payload)
-        sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/SaveArray', params=payload)
-        print(str(round(time.time()-tic,3)), ' seconds to measure, analyze + save')
-    else:
-        time_folder = path + current_time + '/'
-        os.mkdir(time_folder)
-        tic = time.time()
-        for i in np.arange(num_avg):
-            payload = {"analysis": "analyzed", "fileName": time_folder + str(i)}
-            meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/Measure', params=payload)
-            sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/SaveArray', params=payload)
-        print(str(round(time.time()-tic,3)), ' seconds to measure, analyze + save')
+def _deprecation_warning(func_name):
+    """Issue deprecation warning for moved functions."""
+    warnings.warn(
+        f"Importing {func_name} from primary_mirror.interferometer_utils is deprecated. "
+        f"Use 'from mirror_control.interferometer.interferometer_utils import {func_name}' instead. "
+        "This compatibility import will be removed in a future version.",
+        DeprecationWarning,
+        stacklevel=3
+    )
 
-def take_interferometer_coefficients(num_avg=10):
-    current_time = datetime.datetime.now().strftime('%H%M%S')
-    savefile = current_time
-    payload = {"analysis": "zernikeresidual", "count": str(num_avg), "useNAN": 'false'}
-    meas = requests.get('http://localhost/WebService4D/WebService4D.asmx/AverageMeasure', params=payload)
-    sav = requests.get('http://localhost/WebService4D/WebService4D.asmx/GetZernikeCoeff', params=payload)
-    output = sav.content.decode('utf-8')
-    first_split = output.split('output/')[-1]
-    filename = first_split.split('</string>')[0]
-    return filename
+def take_interferometer_measurements(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils instead."""
+    _deprecation_warning('take_interferometer_measurements')
+    
+    # Add the mirror-control path to sys.path if not already there
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from interferometer.interferometer_utils import take_interferometer_measurements as _func
+    return _func(*args, **kwargs)
 
-def correct_tip_tilt_power(zernikes,s,gain):
-    print('Tilt: ' + str(zernikes[2]))
-    print('Tip: ' + str(zernikes[1]))
-    print('Power: ' + str(zernikes[3]))
+def take_interferometer_coefficients(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils instead."""
+    _deprecation_warning('take_interferometer_coefficients')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from interferometer.interferometer_utils import take_interferometer_coefficients as _func
+    return _func(*args, **kwargs)
 
-    delta_tilt = gain * 0.18 * zernikes[2] / 20
-    delta_tip = gain * 0.175 * zernikes[1] / 20
-    delta_power = -gain * 2 * zernikes[3] / 4.1
+def correct_tip_tilt_power(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils instead."""
+    _deprecation_warning('correct_tip_tilt_power')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from interferometer.interferometer_utils import correct_tip_tilt_power as _func
+    return _func(*args, **kwargs)
 
-    if True:
-        s.setPositionRel(delta_tilt, channel=1)
-        s.setPositionRel(delta_tip, channel=2)
-        s.setPositionRel(delta_power, channel=3)
+def hold_alignment(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils instead."""
+    _deprecation_warning('hold_alignment')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from interferometer.interferometer_utils import hold_alignment as _func
+    return _func(*args, **kwargs)
 
-def hold_alignment(duration, number_frames_avg, s, s_gain):
-    tic = time.time()
-    while time.time() - tic < duration:
-        coef_filename = take_interferometer_coefficients(number_frames_avg)
-        coef_file = "C:/inetpub/wwwroot/output/" + coef_filename
-        zernikes = np.fromfile(coef_file, dtype=np.dtype('d'))
-        correct_tip_tilt_power(zernikes, s, s_gain)
-        time.sleep(10)
-
-def start_alignment(iterations, number_frames_avg, s, s_gain):
-    for i in range(iterations):
-        coef_filename = take_interferometer_coefficients(number_frames_avg)
-        coef_file = "C:/inetpub/wwwroot/output/" + coef_filename
-        zernikes = np.fromfile(coef_file, dtype=np.dtype('d'))
-        correct_tip_tilt_power(zernikes, s, s_gain)
-        time.sleep(1)
+def start_alignment(*args, **kwargs):
+    """DEPRECATED: Use mirror_control.interferometer.interferometer_utils instead."""
+    _deprecation_warning('start_alignment')
+    
+    mirror_control_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'mirror-control')
+    if mirror_control_path not in sys.path:
+        sys.path.insert(0, mirror_control_path)
+    
+    from interferometer.interferometer_utils import start_alignment as _func
+    return _func(*args, **kwargs)
 
 

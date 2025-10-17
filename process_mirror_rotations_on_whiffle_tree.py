@@ -101,32 +101,46 @@ for i, day in enumerate(day_holder):
         rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
         test.update({"rms_raw":rms})
 
-    rms_raw = [test["rms_raw"] for test in copy_holder]
+    surface_holder.append(test["surface"])
+#%%
+avg_surface = np.mean(surface_holder,0)
+plot_single_mirror('Average surface', avg_surface, include_rms = True)
 
-    multiple_rotations = np.split(array_of_mod_rotation,np.where(array_of_mod_rotation==0)[0])
-    multiple_rms = np.split(np.array(rms_raw),np.where(array_of_mod_rotation==0)[0])
+Mavg,Cavg = get_M_and_C(avg_surface,Z)
+remove_radial = [0,1,2,4,12,24,40]
+avg_surface_sans_radial = remove_modes(Mavg,Cavg,Z,remove_radial)
+plot_single_mirror('Avg surface sans radial', avg_surface_sans_radial, include_rms = True)
 
-    set_of_labels = ['CW v1','CW v2', 'CCW']
-    rms_holder = []
-    rot_holder = []
+np.save(whiffle_tree_path + 'whiffle_tree_contribution.npy', avg_surface)
+np.save(whiffle_tree_path + 'whiffle_tree_sans_radial.npy', avg_surface_sans_radial)
 
-    for num in np.arange(len(multiple_rotations)):
-        if len(multiple_rotations[num]) > 1:
-            if i == 0:
-                continue
-            if i == 1:
-                line = plt.plot(multiple_rotations[num],multiple_rms[num], color = 'b')
-            elif i == 2:
-                line = plt.plot(multiple_rotations[num],multiple_rms[num], color = 'r')
-            else:
-                line = plt.plot(multiple_rotations[num],multiple_rms[num], color = 'g')
-            #plt.axhline(y=np.mean(multiple_rms[num]),linestyle='--',color=line[0].get_color())
-            print(np.mean(multiple_rms[num]))
-            label_iter = label_iter + 1
-            rms_holder.append(multiple_rms[num])
-            rot_holder.append(multiple_rotations[num])
-#plt.plot(np.mean(rot_holder,0),np.mean(rms_holder,0),color='k',label='Mean')
+
+#%%
+
+
+
+for test in copy_holder:
+    plot_ref = test["surface"] - avg_surface_sans_radial
+    vals = plot_ref[~np.isnan(plot_ref)]*1000
+    rms = np.sqrt(np.sum(np.power(vals,2))/len(vals))
+    test.update({"rms_avg":rms})
+
+    plot_single_mirror('Mirror rotated ' + test["rotation"] + ' degrees', plot_ref, include_rms=True)
+
+#%%
+
+
+#%%
+rms_raw = [test["rms_raw"] for test in copy_holder]
+rms_avg = [test["rms_avg"] for test in copy_holder]
+rotation = [test["rotation"] for test in copy_holder]
+
+plt.plot(rotation,rms_raw,label='Raw rms error',color='r')
+plt.plot(rotation,rms_avg,label='Mean-subtracted rms error',color='blue')
 plt.xlabel('Rotation position')
+plt.ylabel('Rms error(nm)')
+plt.legend()
+plt.title('Total normalized error with/without whiffle tree contribution')
 plt.ylabel('Rms error (nm)')
 plt.title('Rms error at different rotations on whiffle tree')
 #plt.legend(['1','','','2'])
